@@ -56,8 +56,8 @@ const HI_TEK_TASKS_MAP = [
 async function sendDataToSheet(sheetName, method, data = {}) {
     let payload = { sheetName, method };
 
-    // FIX: Standardize all mutation operations (POST, PUT, DELETE, and BATCH) 
-    // to use the 'data' key, which is the most common expectation for Apps Script endpoints.
+    // CRITICAL FIX: Standardize all mutation operations (POST, PUT, DELETE, and BATCH) 
+    // to use the 'data' key, which is required by the Apps Script endpoint.
     if (['POST', 'PUT', 'DELETE'].includes(method) || method.includes('BATCH')) {
         payload.data = data; 
     } else {
@@ -330,12 +330,14 @@ function updateKPIs(project, tasks, expenses) {
     
     // Highlight margin based on value
     const marginElement = document.getElementById('kpi-net-margin');
-    if (netMargin < (projectValue * 0.1) && netMargin > 0) { // <10% margin is warning
-        marginElement.style.color = '#ffc107'; // Yellow
-    } else if (netMargin <= 0) {
-        marginElement.style.color = '#dc3545'; // Red
-    } else {
-        marginElement.style.color = '#28a745'; // Green
+    if (marginElement) {
+        if (netMargin < (projectValue * 0.1) && netMargin > 0) { // <10% margin is warning
+            marginElement.style.color = '#ffc107'; // Yellow
+        } else if (netMargin <= 0) {
+            marginElement.style.color = '#dc3545'; // Red
+        } else {
+            marginElement.style.color = '#28a745'; // Green
+        }
     }
 }
 
@@ -384,14 +386,14 @@ const projectForm = document.getElementById('projectForm');
 
 if (addProjectBtn) {
     addProjectBtn.addEventListener('click', () => {
-        projectForm.reset();
-        projectModal.style.display = 'block';
+        if(projectForm) projectForm.reset();
+        if(projectModal) projectModal.style.display = 'block';
     });
 }
 
 if (closeModalBtn) {
     closeModalBtn.addEventListener('click', () => {
-        projectModal.style.display = 'none';
+        if(projectModal) projectModal.style.display = 'none';
     });
 }
 
@@ -434,14 +436,15 @@ if (projectForm) {
 
         // Send Project data (single POST) and then Initial Tasks (POST_BATCH) concurrently
         const [projectResult, tasksResult] = await Promise.all([
-            sendDataToSheet('Projects', 'POST', projectData),
-            // NOTE: sendDataToSheet will now use the 'data' key for this array.
+            // sendDataToSheet will now use the 'data' key for this object.
+            sendDataToSheet('Projects', 'POST', projectData), 
+            // sendDataToSheet will now use the 'data' key for this array.
             sendDataToSheet('Tasks', 'POST_BATCH', initialTasks) 
         ]);
 
         if (projectResult.status === 'success' && tasksResult.status === 'success') {
-            projectModal.style.display = 'none';
-            projectForm.reset();
+            if(projectModal) projectModal.style.display = 'none';
+            if(projectForm) projectForm.reset();
             await loadProjects();
             showMessageBox(`Project ${projectData.ProjectName} created successfully with ${initialTasks.length} initial tasks!`, 'success');
         } else {
@@ -480,9 +483,12 @@ if (expenseEntryForm) {
         const result = await sendDataToSheet('Expenses', 'POST', expenseData);
 
         if (result.status === 'success') {
-            expenseEntryForm.reset();
+            if(expenseEntryForm) expenseEntryForm.reset();
             // Reset Date to today for convenience
-            document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0]; 
+            const expenseDateInput = document.getElementById('expenseDate');
+            if(expenseDateInput) {
+                expenseDateInput.value = new Date().toISOString().split('T')[0];
+            }
             await updateDashboard(allProjects.find(p => p.ProjectID === currentProjectID));
             showMessageBox(`Expense recorded successfully!`, 'success');
         } else {
@@ -507,8 +513,8 @@ if (deleteProjectBtn) {
             return;
         }
         
-        // Use showMessageBox as a custom confirmation instead of window.confirm
-        if (!confirm(`Are you sure you want to permanently delete project ${currentProjectID} and ALL its associated tasks, expenses, and materials? This action cannot be undone.`)) {
+        // Use custom confirmation (or better, a modal) instead of window.confirm
+        if (!confirm(`Are you sure you want to permanently delete project ${currentProjectID} and ALL its associated tasks and expenses? This action cannot be undone.`)) {
              return;
         }
 
@@ -519,8 +525,6 @@ if (deleteProjectBtn) {
             sendDataToSheet('Projects', 'DELETE', deletePayload),
             sendDataToSheet('Tasks', 'DELETE', deletePayload),
             sendDataToSheet('Expenses', 'DELETE', deletePayload),
-            // Assuming there's a Materials sheet/endpoint
-            // sendDataToSheet('Materials', 'DELETE', deletePayload) // Commented out as Materials sheet is not confirmed
         ]);
 
 
@@ -601,7 +605,6 @@ if (cancelEditBtn) {
 const closeEditModalBtn = document.getElementById('closeEditModalBtn');
 if (closeEditModalBtn) {
     closeEditModalBtn.addEventListener('click', () => {
-        // Corrected a typo here if it was present in a previous version, ensuring correct element access.
         if (editFormElements.modal) editFormElements.modal.style.display = 'none'; 
     });
 }
