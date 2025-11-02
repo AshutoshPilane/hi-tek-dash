@@ -349,7 +349,32 @@ const updateDashboard = (project) => {
 // --- 5, 6, 7, 8: Task, Expense, Material Management (Same Logic) ---
 // (Logic for loadTasks, loadExpenses, loadMaterials, updateTaskForm, expenseEntryForm, recordDispatchForm goes here - UNCHANGED)
 // --- 5, 6, 7, 8: Task, Expense, Material Management (Same Logic) ---
+// --- 5, 6, 7, 8: Task, Expense, Material Management (Placeholder Stubs) ---
+// These functions are required to be defined for the handleProjectSelection to run.
 
+const loadTasks = (projectId) => {
+    // console.log(`[STUB] Loading tasks for project ${projectId}`);
+    const taskTableBody = document.getElementById('taskTableBody');
+    if(taskTableBody) taskTableBody.innerHTML = '<tr><td colspan="5">Tasks not implemented yet.</td></tr>';
+};
+
+const loadExpenses = (projectId) => {
+    // console.log(`[STUB] Loading expenses for project ${projectId}`);
+    const recentExpensesList = document.getElementById('recentExpensesList');
+    if(recentExpensesList) recentExpensesList.innerHTML = '<li class="placeholder">Expenses not implemented yet.</li>';
+};
+
+const loadMaterials = (projectId) => {
+    // console.log(`[STUB] Loading materials for project ${projectId}`);
+    const materialTableBody = document.getElementById('materialTableBody');
+    if(materialTableBody) materialTableBody.innerHTML = '<tr><td colspan="5">Materials not implemented yet.</td></tr>';
+};
+
+const loadTasksForDropdown = (projectId) => {
+    // console.log(`[STUB] Loading tasks for dropdowns for project ${projectId}`);
+};
+
+// --------------------------------------------------------------------------
 // ... (remaining unchanged logic)
 // --- 9. PROJECT ADD/DELETE ---
 
@@ -467,6 +492,7 @@ if (projectEditForm) {
 // --- 11. INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', loadProjects);
+
 
 
 
