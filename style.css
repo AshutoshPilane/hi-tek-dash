@@ -1,0 +1,396 @@
+/* ================================================= */
+/* GLOBAL STYLES */
+/* ================================================= */
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f7f9;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+header {
+    background-color: #007bff;
+    color: white;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    flex-wrap: wrap; 
+}
+
+header h1 {
+    margin: 0;
+    font-size: 1.5em;
+}
+
+header select {
+    padding: 8px;
+    border-radius: 4px;
+    border: none;
+    font-size: 1em;
+    background-color: white;
+    color: #333;
+    min-width: 150px;
+}
+
+/* ================================================= */
+/* BUTTONS & FORMS */
+/* ================================================= */
+
+.button-primary, .button-secondary {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s;
+    white-space: nowrap; /* Prevent buttons from wrapping text */
+}
+
+.button-primary {
+    background-color: #28a745;
+    color: white;
+}
+
+.button-primary:hover {
+    background-color: #218838;
+}
+
+.button-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.button-secondary:hover {
+    background-color: #5a6268;
+}
+
+.form-section {
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+
+.form-section label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+    font-size: 0.9em;
+}
+
+.form-section input[type="text"],
+.form-section input[type="number"],
+.form-section input[type="date"],
+.form-section select {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.form-section input[type="range"] {
+    width: 80%;
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.form-section output {
+    display: inline-block;
+    vertical-align: middle;
+    width: 15%;
+    text-align: right;
+    font-weight: bold;
+}
+
+.form-section button {
+    margin-top: 15px;
+    width: 100%;
+}
+
+/* ================================================= */
+/* PROJECT & DASHBOARD LAYOUTS */
+/* ================================================= */
+
+.dashboard-grid {
+    display: grid;
+    /* Two columns on desktop/wide screens */
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 20px;
+    padding: 20px;
+}
+
+.panel {
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.panel h2 {
+    color: #007bff;
+    margin-top: 0;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.detail-list {
+    list-style: none;
+    padding: 0;
+}
+
+.detail-list li {
+    padding: 5px 0;
+    border-bottom: 1px dotted #eee;
+    font-size: 0.95em;
+}
+
+.detail-list li strong {
+    display: inline-block;
+    width: 120px;
+    color: #555;
+}
+
+/* ================================================= */
+/* KPI STYLES */
+/* ================================================= */
+
+.kpi-container {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+.kpi-box {
+    background-color: #e9ecef;
+    padding: 15px;
+    border-radius: 6px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.kpi-box .label {
+    font-size: 0.8em;
+    color: #6c757d;
+    margin-bottom: 5px;
+}
+
+.kpi-box .value {
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #007bff;
+}
+
+.kpi-full-width {
+    grid-column: span 2;
+}
+
+.kpi-full-width .value {
+    font-size: 1.6em;
+    color: #28a745;
+}
+
+/* ================================================= */
+/* TABLE STYLES */
+/* ================================================= */
+
+.table-container {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-size: 0.9em;
+}
+
+table th, table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+table th {
+    background-color: #f8f9fa;
+    color: #333;
+    font-weight: bold;
+}
+
+table tr:hover:not(:first-child) {
+    background-color: #f0f0f0;
+}
+
+/* Status Classes */
+.status-cell {
+    font-weight: bold;
+    padding: 5px 10px;
+    border-radius: 4px;
+    text-align: center !important;
+}
+
+.status-complete {
+    color: white;
+    background-color: #28a745; /* Green */
+}
+
+.status-in-progress {
+    color: #333;
+    background-color: #ffc107; /* Yellow */
+}
+
+.status-pending {
+    color: white;
+    background-color: #dc3545; /* Red */
+}
+
+/* Progress Bar */
+.progress-container {
+    background-color: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    height: 18px;
+    position: relative;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: #007bff;
+    transition: width 0.5s ease;
+    min-width: 5px;
+}
+
+.progress-text {
+    position: absolute;
+    width: 100%;
+    top: 0;
+    text-align: center;
+    line-height: 18px;
+    font-size: 0.8em;
+    font-weight: bold;
+    color: white; 
+    text-shadow: 1px 1px 1px #333;
+}
+
+/* Expense List */
+#recentExpensesList {
+    list-style: none;
+    padding: 0;
+}
+
+#recentExpensesList li {
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9em;
+}
+
+.expense-date {
+    font-weight: bold;
+    color: #007bff;
+    width: 90px;
+    flex-shrink: 0;
+}
+
+.expense-desc {
+    flex-grow: 1;
+    margin-right: 10px;
+}
+
+.expense-amount {
+    font-weight: bold;
+    color: #dc3545;
+    white-space: nowrap;
+}
+
+.placeholder {
+    color: #6c757d;
+    text-align: center;
+    font-style: italic;
+}
+
+
+/* ================================================= */
+/* MEDIA QUERY: MOBILE OPTIMIZATION */
+/* ================================================= */
+
+@media (max-width: 768px) {
+    
+    /* 1. Change the main grid to a single column */
+    .dashboard-grid {
+        grid-template-columns: 1fr; /* Stack panels vertically on mobile */
+        padding: 10px;
+        gap: 15px;
+    }
+
+    /* 2. Header stacking for better layout */
+    header {
+        padding: 15px 10px;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    header > div {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    header select, header button {
+        margin-top: 5px;
+        width: 100%;
+    }
+
+    /* 3. Restructure the KPI box to be scannable in two columns */
+    .kpi-container {
+        grid-template-columns: repeat(2, 1fr); /* Two columns for KPIs */
+        gap: 8px;
+    }
+
+    .kpi-box {
+        padding: 10px;
+        font-size: 0.8em;
+    }
+    
+    .kpi-box .value {
+        font-size: 1.2em;
+    }
+
+    .kpi-full-width {
+        grid-column: span 2;
+    }
+
+    .kpi-full-width .value {
+        font-size: 1.4em;
+    }
+
+    /* 4. Optimize table for small screen */
+    table th, table td {
+        padding: 5px;
+        font-size: 0.75em;
+    }
+
+    /* Reduce space in detail list */
+    .detail-list li strong {
+        width: 90px;
+    }
+
+    /* Fix expense list on small screens */
+    #recentExpensesList li {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .expense-date, .expense-amount {
+        margin-top: 3px;
+    }
+}
