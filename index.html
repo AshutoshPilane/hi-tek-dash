@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hi Tek Project Dashboard</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
 </head>
 <body>
 
@@ -16,182 +15,176 @@
             <select id="projectSelector"></select>
             <button id="addProjectBtn" class="button-primary">➕ New Project</button>
             <button id="deleteProjectBtn" class="button-secondary">🗑️ Delete Project</button>
+            <button id="editProjectDetailsBtn" class="button-secondary">✏️ Edit Details</button>
         </div>
     </header>
 
-    <div class="panel" style="margin-bottom: 20px;">
-        <h2>Key Performance Indicators (KPIs)</h2>
-        <div class="kpi-container">
-            <div class="kpi-box">
-                <div class="label">Days Spent</div>
-                <div class="value" id="kpi-days-spent">N/A</div>
-            </div>
-            <div class="kpi-box">
-                <div class="label">Days Remaining (Deadline)</div>
-                <div class="value" id="kpi-days-left">N/A</div>
-            </div>
-            <div class="kpi-box">
-                <div class="label">Project Progress (Tasks)</div>
-                <div class="value" id="kpi-progress">0%</div>
-            </div>
-            <div class="kpi-box">
-                <div class="label">Material Progress (Dispatched)</div>
-                <div class="value" id="kpi-material-progress">0% Dispatched</div>
-            </div>
-            <div class="kpi-box kpi-full-width">
-                <div class="label">Work Order Amount</div>
-                <div class="value" id="kpi-work-order">₹ 0</div>
-            </div>
-            <div class="kpi-box kpi-full-width">
-                <div class="label">Total Expenses Recorded</div>
-                <div class="value" id="kpi-total-expenses">₹ 0</div>
-            </div>
+    <!-- Project Edit Modal -->
+    <div id="projectEditModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="closeEditModalBtn">&times;</span>
+            <h2>Edit Project Details</h2>
+            <form id="projectEditForm">
+                <!-- CRITICAL: Hidden field to hold the ProjectID -->
+                <input type="hidden" id="editProjectID" name="ProjectID"> 
+
+                <div class="form-group">
+                    <label for="editProjectName">Project Name:</label>
+                    <input type="text" id="editProjectName" name="ProjectName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editClientName">Client Name:</label>
+                    <input type="text" id="editClientName" name="ClientName" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editProjectLocation">Location/City:</label>
+                    <input type="text" id="editProjectLocation" name="ProjectLocation" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editProjectStartDate">Start Date:</label>
+                    <input type="date" id="editProjectStartDate" name="ProjectStartDate" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editProjectDeadline">Deadline:</label>
+                    <input type="date" id="editProjectDeadline" name="ProjectDeadline" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="editProjectValue">Project Value (INR):</label>
+                    <input type="number" id="editProjectValue" name="ProjectValue" min="0" step="0.01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="editProjectType">Project Type:</label>
+                    <select id="editProjectType" name="ProjectType" required>
+                        <option value="Residential">Residential</option>
+                        <option value="Commercial">Commercial</option>
+                        <option value="Industrial">Industrial</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="button-primary">Save Changes</button>
+                    <button type="button" id="cancelEditBtn" class="button-secondary">Cancel</button>
+                </div>
+            </form>
         </div>
     </div>
 
+
+    <!-- Project Creation Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="closeModalBtn">&times;</span>
+            <h2>Create New Project</h2>
+            <form id="projectForm">
+                <div class="form-group">
+                    <label for="projectName">Project Name:</label>
+                    <input type="text" id="projectName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="clientName">Client Name:</label>
+                    <input type="text" id="clientName" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="projectLocation">Location/City:</label>
+                    <input type="text" id="projectLocation" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="projectStartDate">Start Date:</label>
+                    <input type="date" id="projectStartDate" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="projectDeadline">Deadline:</label>
+                    <input type="date" id="projectDeadline" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="projectValue">Project Value (INR):</label>
+                    <input type="number" id="projectValue" min="0" step="0.01" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="projectType">Project Type:</label>
+                    <select id="projectType" required>
+                        <option value="Residential">Residential</option>
+                        <option value="Commercial">Commercial</option>
+                        <option value="Industrial">Industrial</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="button-primary">Create Project</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main Dashboard Content -->
     <div class="dashboard-grid">
 
+        <!-- Column 1: KPIs & Tasks -->
+        <div class="panel">
+            <h2>Key Performance Indicators (KPIs)</h2>
+            <div class="kpi-container">
+                <div class="kpi-box">
+                    <div class="label">Days Spent</div>
+                    <div class="value" id="kpi-days-spent">N/A</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="label">Days Remaining (Deadline)</div>
+                    <div class="value" id="kpi-days-left">N/A</div>
+                </div>
+                <div class="kpi-box kpi-full-width">
+                    <div class="label">Total Tasks Complete / Total Tasks</div>
+                    <div class="value" id="kpi-task-completion">N/A</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="label">Total Project Value</div>
+                    <div class="value" id="kpi-project-value">N/A</div>
+                </div>
+                <div class="kpi-box">
+                    <div class="label">Total Expenses</div>
+                    <div class="value" id="kpi-total-expenses">N/A</div>
+                </div>
+                <div class="kpi-box kpi-full-width">
+                    <div class="label">Net Margin Remaining (Value - Expenses)</div>
+                    <div class="value" id="kpi-net-margin">N/A</div>
+                </div>
+            </div>
+
+            <hr>
+
+            <h2>Project Status and Tasks</h2>
+            <ul id="taskList">
+                <li class="placeholder">Select a project to view tasks...</li>
+            </ul>
+
+        </div>
+
+        <!-- Column 2: Details, Expenses, Materials -->
         <div class="panel">
             <h2>Project Details</h2>
-            
-            <div id="projectDetailsDisplay">
-                <ul class="detail-list">
-                    <li><strong>Name:</strong> <span id="display-name">N/A</span></li>
-                    <li><strong>Start Date:</strong> <span id="display-start-date">N/A</span></li>
-                    <li><strong>Deadline:</strong> <span id="display-deadline">N/A</span></li>
-                    <li><strong>Location:</strong> <span id="display-location">N/A</span></li>
-                    <li><strong>Amount:</strong> <span id="display-amount">N/A</span></li>
-                    <li><strong>Contractor:</strong> <span id="display-contractor">N/A</span></li>
-                    <li><strong>Engineers:</strong> <span id="display-engineers">N/A</span></li>
-                    <li><strong>Contact 1:</strong> <span id="display-contact1">N/A</span></li>
-                    <li><strong>Contact 2:</strong> <span id="display-contact2">N/A</span></li>
-                </ul>
-                <button id="editProjectDetailsBtn" class="button-secondary" style="margin-top: 15px;">Edit Details</button>
-            </div>
-            
-            <div id="projectDetailsEdit" style="display: none;">
-                <label for="input-name">Name:</label>
-                <input type="text" id="input-name">
-                
-                <label for="input-start-date">Start Date:</label>
-                <input type="date" id="input-start-date">
-                
-                <label for="input-deadline">Deadline:</label>
-                <input type="date" id="input-deadline">
-                
-                <label for="input-location">Location:</label>
-                <input type="text" id="input-location">
-                
-                <label for="input-amount">Amount (INR):</label>
-                <input type="number" id="input-amount" min="0">
-                
-                <label for="input-contractor">Contractor:</label>
-                <input type="text" id="input-contractor">
-                
-                <label for="input-engineers">Engineers:</label>
-                <input type="text" id="input-engineers">
-                
-                <label for="input-contact1">Contact 1:</label>
-                <input type="text" id="input-contact1">
-                
-                <label for="input-contact2">Contact 2:</label>
-                <input type="text" id="input-contact2">
-                
-                <button id="saveProjectDetailsBtn" class="button-primary" style="margin-top: 15px;">Save Details</button>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h2>Task Tracker (23 Steps)</h2>
-            
-            <div class="form-section">
-                <h3>Update Task Status</h3>
-                <form id="updateTaskForm">
-                    <label for="taskId">Select Task:</label>
-                    <select id="taskId" required>
-                        <option value="">-- Select a Task --</option>
-                    </select>
-                    
-                    <label for="taskProgress">Progress (%):</label>
-                    <input type="range" id="taskProgress" min="0" max="100" value="0" oninput="this.nextElementSibling.value=this.value+'%'">
-                    <output>0%</output>
-                    
-                    <label for="taskDue">New Due Date:</label>
-                    <input type="date" id="taskDue">
-                    
-                    <button type="submit" class="button-primary">Update Task</button>
-                </form>
+            <div id="projectDetailDisplay">
+                <p><strong>Client:</strong> <span id="detailClientName">N/A</span></p>
+                <p><strong>Location:</strong> <span id="detailProjectLocation">N/A</span></p>
+                <p><strong>Start Date:</strong> <span id="detailProjectStartDate">N/A</span></p>
+                <p><strong>Deadline:</strong> <span id="detailProjectDeadline">N/A</span></p>
+                <p><strong>Value:</strong> <span id="detailProjectValue">N/A</span></p>
+                <p><strong>Type:</strong> <span id="detailProjectType">N/A</span></p>
             </div>
 
-            <h3 style="margin-top: 25px;">Full Project Task List</h3>
-            <div class="table-container">
-                <table id="taskTable">
-                    <thead>
-                        <tr>
-                            <th>Task</th>
-                            <th>Responsible</th>
-                            <th>Progress</th>
-                            <th>Due Date</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="taskTableBody">
-                        <tr><td colspan="5">No tasks loaded...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <hr>
 
-        <div class="panel">
-            <h2>Material Dispatch Tracker</h2>
-
-            <div class="form-section">
-                <h3>Record Dispatch/Update Material</h3>
-                <form id="recordDispatchForm">
-                    
-                    <label for="materialItemId">Select Existing Material:</label>
-                    <select id="materialItemId">
-                        <option value="">-- Select Existing Material --</option>
-                    </select>
-
-                    <label for="newMaterialName">OR New Material Name:</label>
-                    <input type="text" id="newMaterialName">
-                    
-                    <label for="requiredQuantity">Required Quantity (Only for New Material):</label>
-                    <input type="number" id="requiredQuantity" min="0">
-                    
-                    <label for="dispatchQuantity">Dispatch Quantity (0 for New Material First Entry):</label>
-                    <input type="number" id="dispatchQuantity" min="0" required>
-
-                    <label for="materialUnit">Unit (e.g., Unit, Ton, M):</label>
-                    <input type="text" id="materialUnit" required>
-
-                    <button type="submit" class="button-primary">Record Dispatch</button>
-                </form>
-            </div>
-            
-            <h3 style="margin-top: 25px;">Material Status Overview</h3>
-            <div class="table-container">
-                <table id="materialTable">
-                    <thead>
-                        <tr>
-                            <th>Item Name</th>
-                            <th>Required Qty</th>
-                            <th>Dispatched Qty</th>
-                            <th>Balance Qty</th>
-                            <th>Progress</th>
-                        </tr>
-                    </thead>
-                    <tbody id="materialTableBody">
-                        <tr><td colspan="5">No materials loaded...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h2>Expense Tracker</h2>
-
+            <!-- Expenses Section -->
             <div class="form-section">
                 <h3>Record New Expense</h3>
                 <form id="expenseEntryForm">
@@ -221,6 +214,7 @@
             <ul id="recentExpensesList">
                 <li class="placeholder">No expenses loaded...</li>
             </ul>
+
         </div>
 
     </div>
@@ -228,4 +222,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-
