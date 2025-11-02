@@ -40,17 +40,42 @@ const HI_TEK_TASKS_MAP = [
 /**
  * Fetches data from a specified sheet (GET request).
  */
+/**
+ * Fetches data from a specified sheet (GET request).
+ */
 const fetchDataFromSheet = async (sheetName) => {
     // FIX: Add a unique timestamp to the URL to prevent caching (cache-buster).
     const cacheBuster = new Date().getTime();
     const url = `${SHEET_API_URL}?sheet=${sheetName}&cache=${cacheBuster}`;
     try {
         const response = await fetch(url);
+        
+        // 1. Read as text first to handle non-JSON responses gracefully
+        const textResponse = await response.text(); 
+        let data;
+
+        try {
+            // 2. Try to parse as JSON
+            data = JSON.parse(textResponse);
+        } catch (e) {
+            // If parsing fails, the response was likely the HTML error page
+            console.error('API Response was not JSON (Likely an Apps Script/Proxy HTML error page):', textResponse);
+            document.getElementById('currentProjectName').textContent = 'API Error! Check Console.';
+            // Re-throw a descriptive error based on the HTML content starting with '<!DOCTYPE'
+            throw new Error(`API Request Failed: Received non-JSON response from server. Check Apps Script deployment/permissions. (Text: ${textResponse.substring(0, 50)}...)`);
+        }
+
+        // 3. Check for HTTP errors (4xx, 5xx)
         if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
-        const data = await response.json();
-        return data; 
+        
+        // 4. Check for error status returned by the script (if implemented)
+        if (data && data.status === 'error') {
+            throw new Error(`Apps Script Error: ${data.message || 'Unknown script error'}`);
+        }
+        
+        return data; // Return the parsed JSON data
     } catch (error) {
         console.error(`Fetch Error on ${sheetName}:`, error);
         document.getElementById('currentProjectName').textContent = 'API Error! Check Console.';
@@ -440,3 +465,4 @@ if (projectEditForm) {
 // --- 11. INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', loadProjects);
+
