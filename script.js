@@ -348,7 +348,29 @@ const updateDashboard = (project) => {
 
 // --- 5, 6, 7, 8: Task, Expense, Material Management (Same Logic) ---
 // (Logic for loadTasks, loadExpenses, loadMaterials, updateTaskForm, expenseEntryForm, recordDispatchForm goes here - UNCHANGED)
+// --- 5, 6, 7, 8: Task, Expense, Material Management (Same Logic) ---
 
+const loadTasks = (projectId) => {
+    console.log(`TODO: Loading tasks for project ${projectId}`);
+    // Future implementation: Fetch tasks and update taskTableBody
+};
+
+const loadExpenses = (projectId) => {
+    console.log(`TODO: Loading expenses for project ${projectId}`);
+    // Future implementation: Fetch expenses and update recentExpensesList
+};
+
+const loadMaterials = (projectId) => {
+    console.log(`TODO: Loading materials for project ${projectId}`);
+    // Future implementation: Fetch materials and update materialTableBody
+};
+
+const loadTasksForDropdown = (projectId) => {
+    console.log(`TODO: Loading tasks for dropdowns for project ${projectId}`);
+    // Future implementation
+};
+
+// ... (remaining unchanged logic)
 // --- 9. PROJECT ADD/DELETE ---
 
 const generateNewID = () => {
@@ -465,4 +487,5 @@ if (projectEditForm) {
 // --- 11. INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', loadProjects);
+
 
