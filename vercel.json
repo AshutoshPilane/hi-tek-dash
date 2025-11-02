@@ -1,8 +1,8 @@
 {
-  "rewrites": [
-    { 
-      "source": "/api/v1/:path*", 
-      "destination": "https://sheetdb.io/api/v1/:path*"
-    }
-  ]
+    "rewrites": [
+      {
+        "source": "/api/:match*",
+        "destination": "https://script.google.com/macros/s/AKfycbzxcMcx2Fm7ZW8lWX_1hxYemFP8n35XPbEIswQUm-V2xH4AraXGcdB2TH077BU4aIHVNA/exec"
+      }
+    ]
 }
