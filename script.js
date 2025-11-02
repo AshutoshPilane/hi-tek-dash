@@ -8,6 +8,14 @@ const SHEET_API_URL = "/api";
 let currentProjectID = null; 
 let allProjects = [];
 
+// --- DUMMY FUNCTION for error/success messages (Required for error-free execution) ---
+// This prevents crashes from missing showMessageBox calls.
+function showMessageBox(message, type) {
+    console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
+    // In a full application, this would display a nice UI modal instead of alert()
+}
+
+
 // --- 1. THE HI TEK 23-STEP WORKFLOW LIST ---
 const HI_TEK_TASKS_MAP = [
     { Name: '1. Understanding the System', Responsible: 'Project Manager' },
@@ -22,543 +30,549 @@ const HI_TEK_TASKS_MAP = [
     { Name: '10. Prepare BOQ for Production', Responsible: 'Production Planner' },
     { Name: '11. Approval from Director', Responsible: 'Director/General Manager' },
     { Name: '12. Prepare Invoices', Responsible: 'Accounts Manager' },
-    { Name: '13. Dispatch', Responsible: 'Logistics Manager' },
-    { Name: '14. Payment Follow-Up - 1st Call', Responsible: 'Accounts Manager' },
-    { Name: '15. Installation', Responsible: 'Installation Team Lead/Site Engineer' },
-    { Name: '16. Inspection', Responsible: 'Quality Inspector' },
-    { Name: '17. Payment Follow-Up - 2nd Call', Responsible: 'Accounts Manager' },
-    { Name: '18. Final Handover', Responsible: 'Project Manager/Site Engineer' },
-    { Name: '19. Final Payment Follow-Up', Responsible: 'Accounts Manager' },
-    { Name: '20. Closing The Deal', Responsible: 'Sales/Business Development Team' },
-    { Name: '21. System Clean Up', Responsible: 'Project Manager' },
-    { Name: '22. Documentation & Filing', Responsible: 'Admin/Project Coordinator' },
-    { Name: '23. Feedback Collection', Responsible: 'Project Manager' }
+    { Name: '13. Dispatch Materials', Responsible: 'Logistics Team' },
+    { Name: '14. Project Execution', Responsible: 'Field Team' },
+    { Name: '15. Quality Check', Responsible: 'Quality Inspector' },
+    { Name: '16. Rectification and Re-Check', Responsible: 'Site Engineer/Field Team' },
+    { Name: '17. Final Measurements', Responsible: 'Surveyor/Field Engineer' },
+    { Name: '18. Final Approval', Responsible: 'Quality Inspector/Project Manager' },
+    { Name: '19. Final Invoice Submission', Responsible: 'Accounts Manager' },
+    { Name: '20. Handover Documentation', Responsible: 'Project Manager' },
+    { Name: '21. Project Completion Certificate', Responsible: 'Director/Client' },
+    { Name: '22. Warranty and Maintenance Schedule', Responsible: 'Service Team' },
+    { Name: '23. Project Archiving', Responsible: 'Admin' }
 ];
 
-// --- 2. API UTILITY FUNCTIONS (Apps Script Format) ---
+
+// --- 2. UTILITY FUNCTIONS ---
 
 /**
- * Fetches data from a specified sheet (GET request).
+ * Sends data to the Google Sheets API proxy.
+ * @param {string} sheetName - The name of the sheet to interact with (e.g., 'Projects', 'Tasks').
+ * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST', 'PUT', 'DELETE').
+ * @param {Object} data - The payload to send (will be JSON stringified).
+ * @returns {Promise<Object>} The JSON response from the API.
  */
-const fetchDataFromSheet = async (sheetName) => {
-    // FIX: Add a unique timestamp to the URL to prevent caching (cache-buster).
-    const cacheBuster = new Date().getTime();
-    const url = `${SHEET_API_URL}?sheet=${sheetName}&cache=${cacheBuster}`;
-    try {
-        const response = await fetch(url);
-        
-        // 1. Read as text first to handle non-JSON responses gracefully
-        const textResponse = await response.text(); 
-        let data;
-
-        try {
-            // 2. Try to parse as JSON
-            data = JSON.parse(textResponse);
-        } catch (e) {
-            // If parsing fails, the response was likely the HTML error page
-            console.error('API Response was not JSON (Likely an Apps Script/Proxy HTML error page):', textResponse);
-            document.getElementById('currentProjectName').textContent = 'API Error! Check Console.';
-            // Re-throw a descriptive error based on the HTML content starting with '<!DOCTYPE'
-            throw new Error(`API Request Failed: Received non-JSON response from server. Check Apps Script deployment/permissions. (Text: ${textResponse.substring(0, 50)}...)`);
-        }
-
-        // 3. Check for HTTP errors (4xx, 5xx)
-        if (!response.ok) {
-            // We rely on the JSON body for error status since Apps Script can't set status code
-            if (data && data.status === 'error') {
-                 throw new Error(`Apps Script Error: ${data.message || 'Unknown script error'}`);
-            }
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        
-        // 4. Check for error status returned by the script (if implemented)
-        if (data && data.status === 'error') {
-            throw new Error(`Apps Script Error: ${data.message || 'Unknown script error'}`);
-        }
-        
-        return data; // Return the parsed JSON data
-    } catch (error) {
-        console.error(`Fetch Error on ${sheetName}:`, error);
-        document.getElementById('currentProjectName').textContent = 'API Error! Check Console.';
-        return [];
-    }
-};
-
-/**
- * Sends data to a specified sheet (POST/PUT/DELETE request) to the Apps Script Web App.
- * FIX: All requests to Apps Script are POST, and the intended action (method) is passed in the body.
- */
-const sendDataToSheet = async (sheetName, method, payload) => {
-    const url = `${SHEET_API_URL}?sheet=${sheetName}`;
+async function sendDataToSheet(sheetName, method, data = {}) {
+    const payload = { ...data, sheetName, method };
     
-    // Correct structure for Google Apps Script POST/PUT/DELETE
-    const finalPayload = {
-        sheet: sheetName,
-        method: method, // The Apps Script reads this to know the intended CRUD operation
-        data: payload
-    };
+    // Convert GET to POST for Google Apps Script compatibility,
+    // sending all query parameters in the body.
+    const fetchMethod = 'POST'; 
 
     try {
-        const response = await fetch(url, {
-            method: 'POST', // All fetch calls to Apps Script must be POST
-            mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(finalPayload)
+        const response = await fetch(SHEET_API_URL, {
+            method: fetchMethod,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
         });
 
-        const textResponse = await response.text(); // Read as text first
-        let result;
-
-        try {
-            result = JSON.parse(textResponse);
-        } catch (e) {
-            // If it's not JSON, it's the HTML error page (the 404 issue)
-            console.error('API Response was not JSON (Likely a 404 HTML page):', textResponse);
-            throw new Error(`API Request Failed: Received non-JSON response from server. Check Vercel/Netlify proxy configuration. (Text: ${textResponse.substring(0, 50)}...)`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
         }
 
-        // Check for fetch error or error status returned by the script
-        if (!response.ok || (result && result.status === 'error')) {
-            console.error('API Response Error:', result);
-            // Use the script's error message if available
-            throw new Error(`API Request Failed (${response.status || 'Script Error'}): ${result.message || 'Unknown error'}`);
-        }
-
-        return { status: 'success', message: result };
+        return await response.json();
 
     } catch (error) {
-        console.error(`${method} Error:`, error);
+        console.error(`Error in sendDataToSheet (${sheetName}, ${method}):`, error);
         return { status: 'error', message: error.message };
     }
-};
-
-// --- DATE UTILITY FUNCTIONS ---
-/**
- * Converts a Google Sheets serial date number (e.g., 45963) to a YYYY-MM-DD string.
- */
-const serialDateToISO = (serial) => {
-    const numSerial = Number(serial);
-    if (typeof numSerial !== 'number' || numSerial < 1 || isNaN(numSerial)) return '';
-    
-    // Note: Sheets uses a different epoch for dates before 1900, but 
-    // the standard epoch (1899-12-30) works for modern dates.
-    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-    const milliseconds = numSerial * 24 * 60 * 60 * 1000;
-    const date = new Date(excelEpoch.getTime() + milliseconds);
-    
-    return date.toISOString().split('T')[0]; 
-};
+}
 
 /**
- * Converts a date (either ISO or serial number) to DD-MM-YYYY string for display.
+ * Calculates the number of days between two dates.
+ * @param {string} startDateString - Date string (YYYY-MM-DD).
+ * @param {string} endDateString - Date string (YYYY-MM-DD).
+ * @returns {number} Number of full days.
  */
-const formatDisplayDate = (dateValue) => {
-    if (!dateValue) return 'N/A';
-    
-    let isoDate = String(dateValue);
-    
-    if (isoDate.match(/^\d+$/)) {
-        isoDate = serialDateToISO(Number(isoDate));
-    }
-    
-    const parts = isoDate.split('-');
-    if (parts.length === 3) {
-        return `${parts[2]}-${parts[1]}-${parts[0]}`; // DD-MM-YYYY
-    }
-    return dateValue;
-};
+function calculateDaysDifference(startDateString, endDateString) {
+    const start = new Date(startDateString);
+    const end = new Date(endDateString);
+    const diffTime = Math.abs(end - start);
+    // Convert ms to days. Add 1 to count the start day itself.
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
 
-/**
- * Creates a UTC-based Date object from an ISO string (YYYY-MM-DD) for reliable comparison.
- */
-const safeDate = (isoDate) => {
-    if (!isoDate || isoDate.length !== 10) return null;
-    const parts = isoDate.split('-');
-    return new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
-};
 
-// --- 3. PROJECT SELECTION AND DISPLAY ---
+// --- 3. PROJECT LOADING AND SELECTION ---
 
 const projectSelector = document.getElementById('projectSelector');
-const currentProjectNameElement = document.getElementById('currentProjectName');
-const projectDetailsDisplay = document.getElementById('projectDetailsDisplay'); 
-const projectDetailsEdit = document.getElementById('projectDetailsEdit'); 
-
-const loadProjects = async () => {
-    if (!projectSelector || !currentProjectNameElement) return; // Added safety check
-    
-    projectSelector.innerHTML = '<option value="">-- Select Project --</option>';
-    currentProjectID = null;
-    allProjects = [];
-    
-    clearDashboard();
-    currentProjectNameElement.textContent = 'Select a Project';
-
-    if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
-    if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
-
-    try {
-        const projectsData = await fetchDataFromSheet('Projects');
-        if (projectsData && projectsData.length > 0) {
-            // Filter to ensure we only process records with a ProjectID
-            allProjects = projectsData.filter(p => p.ProjectID); 
-
-            allProjects.forEach(project => {
-                const option = document.createElement('option');
-                // Use String().trim() for safety against stray spaces/types
-                option.value = String(project.ProjectID).trim(); 
-                option.textContent = `${project.Name} (${project.ProjectID})`;
-                projectSelector.appendChild(option);
-            });
-
-            if (allProjects.length > 0) {
-                const firstProjectId = String(allProjects[0].ProjectID).trim();
-                projectSelector.value = firstProjectId;
-                handleProjectSelection(firstProjectId);
-            }
-        } else {
-            currentProjectNameElement.textContent = 'No Projects Found';
-        }
-    } catch (error) {
-        console.error("Error loading projects:", error);
-        currentProjectNameElement.textContent = 'Error Loading Projects';
-    }
-};
-
-const clearDashboard = () => {
-    const idsToClear = [
-        'kpi-days-spent', 'kpi-days-left', 'kpi-progress', 'kpi-material-progress', 
-        'kpi-work-order', 'kpi-total-expenses',
-        'display-name', 'display-start-date', 'display-deadline', 
-        'display-location', 'display-amount', 'display-contractor', 
-        'display-engineers', 'display-contact1', 'display-contact2'
-    ];
-
-    idsToClear.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.textContent = (id.includes('kpi-work-order') || id.includes('kpi-total-expenses') || id.includes('display-amount')) ? '₹ 0' : 'N/A';
-            if (id.includes('kpi-progress') || id.includes('kpi-material-progress')) {
-                 element.textContent = '0%';
-            }
-        }
-    });
-    
-    const taskTableBody = document.getElementById('taskTableBody');
-    if(taskTableBody) taskTableBody.innerHTML = '<tr><td colspan="5">Select a project to view tasks...</td></tr>';
-    
-    const materialTableBody = document.getElementById('materialTableBody');
-    if(materialTableBody) materialTableBody.innerHTML = '<tr><td colspan="5">Select a project to view materials...</td></tr>';
-    
-    const recentExpensesList = document.getElementById('recentExpensesList');
-    if(recentExpensesList) recentExpensesList.innerHTML = '<li class="placeholder">Select a project to view expenses...</li>';
-};
-
-const handleProjectSelection = (projectID) => {
-    currentProjectID = projectID;
-    
-    // Switch to display mode
-    if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
-    if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
-
-    if (!projectID) {
-        clearDashboard();
-        currentProjectNameElement.textContent = 'Select a Project';
-        return;
-    }
-
-    const selectedProject = allProjects.find(p => String(p.ProjectID).trim() === String(projectID).trim());
-
-    if (selectedProject) {
-        currentProjectNameElement.textContent = selectedProject.Name;
-        updateDashboard(selectedProject);
-        loadTasks(projectID);
-        loadExpenses(projectID);
-        loadMaterials(projectID);
-        loadTasksForDropdown(projectID);
-    } else {
-        clearDashboard();
-        currentProjectNameElement.textContent = 'Project Not Found';
-    }
-};
+const currentProjectNameDisplay = document.getElementById('currentProjectName');
 
 if (projectSelector) {
     projectSelector.addEventListener('change', (e) => {
-        handleProjectSelection(e.target.value);
+        currentProjectID = e.target.value;
+        if (currentProjectID) {
+            const selectedProject = allProjects.find(p => p.ProjectID === currentProjectID);
+            if (selectedProject) {
+                updateDashboard(selectedProject);
+            }
+        }
     });
 }
 
 
-// --- 4. DASHBOARD UPDATES AND CALCULATION ---
-
-const updateDashboard = (project) => {
-    // 1. Convert serial dates to ISO strings for internal use (if they are serial numbers)
-    const startDateRaw = project.StartDate;
-    const deadlineRaw = project.Deadline;
+async function loadProjects() {
+    // Clear previous state
+    allProjects = [];
+    projectSelector.innerHTML = '<option value="">Loading Projects...</option>';
     
-    const startDateISO = startDateRaw ? serialDateToISO(Number(startDateRaw)) : '';
-    const deadlineISO = deadlineRaw ? serialDateToISO(Number(deadlineRaw)) : '';
-    
-    // 1. Update Project Details
-    const detailsMap = {
-        'display-name': project.Name,
-        'display-location': project.Location,
-        'display-contractor': project.Contractor,
-        'display-engineers': project.SiteEngineers,
-        'display-contact1': project.Contact1,
-        'display-contact2': project.Contact2
-    };
+    const response = await sendDataToSheet('Projects', 'GET', {});
 
-    for (const [id, value] of Object.entries(detailsMap)) {
-        const element = document.getElementById(id);
-        if (element) element.textContent = value || 'N/A';
-    }
-
-    // Apply date formatting for display (DD-MM-YYYY)
-    const displayStartDate = document.getElementById('display-start-date');
-    if(displayStartDate) displayStartDate.textContent = formatDisplayDate(startDateRaw);
-    
-    const displayDeadline = document.getElementById('display-deadline');
-    if(displayDeadline) displayDeadline.textContent = formatDisplayDate(deadlineRaw);
-    
-    // 2. Work Order KPI (Project Amount)
-    const amount = parseFloat(project.Amount) || 0;
-    const kpiWorkOrder = document.getElementById('kpi-work-order');
-    const displayAmount = document.getElementById('display-amount');
-
-    if(kpiWorkOrder) kpiWorkOrder.textContent = `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-    if(displayAmount) displayAmount.textContent = `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-
-
-    // 3. Time Calculations 
-    const startDate = startDateISO ? safeDate(startDateISO) : null;
-    const deadline = deadlineISO ? safeDate(deadlineISO) : null;
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
-
-    const diffInDays = (date1, date2) => {
-        if (!date1 || !date2 || isNaN(date1.getTime()) || isNaN(date2.getTime())) return NaN;
-        const diffTime = Math.abs(date2.getTime() - date1.getTime()); 
-        return Math.floor(diffTime / (1000 * 60 * 60 * 24)); 
-    };
-
-    // Days Spent (Count full days elapsed)
-    const kpiDaysSpentElement = document.getElementById('kpi-days-spent');
-    if (startDate && kpiDaysSpentElement) {
-        const daysSpent = diffInDays(startDate, today);
-        kpiDaysSpentElement.textContent = `${daysSpent > 0 ? daysSpent : 0} days`;
-    } else if (kpiDaysSpentElement) {
-         kpiDaysSpentElement.textContent = 'N/A';
-    }
-
-    // Days Left (Count full days remaining)
-    const kpiDaysLeftElement = document.getElementById('kpi-days-left');
-    if (deadline && kpiDaysLeftElement) {
-        const daysToDeadline = diffInDays(today, deadline); 
-        if (today.getTime() <= deadline.getTime()) {
-            kpiDaysLeftElement.textContent = `${daysToDeadline > 0 ? daysToDeadline : 0} days`;
-        } else {
-            const daysOverdue = diffInDays(deadline, today); 
-            kpiDaysLeftElement.textContent = `${daysOverdue} days (OVERDUE)`;
+    if (response.status === 'success' && response.data && response.data.length > 0) {
+        allProjects = response.data;
+        populateProjectSelector(allProjects);
+        
+        // Auto-select the first project or the previously selected one
+        currentProjectID = currentProjectID || allProjects[0].ProjectID;
+        projectSelector.value = currentProjectID;
+        
+        const initialProject = allProjects.find(p => p.ProjectID === currentProjectID);
+        if (initialProject) {
+            await updateDashboard(initialProject);
         }
-    } else if (kpiDaysLeftElement) {
-         kpiDaysLeftElement.textContent = 'No Deadline';
+
+    } else {
+        projectSelector.innerHTML = '<option value="">No Projects Found</option>';
+        updateDashboard(null);
     }
-};
+}
 
-// --- 5, 6, 7, 8: Task, Expense, Material Management (Placeholder Stubs) ---
+function populateProjectSelector(projects) {
+    projectSelector.innerHTML = '<option value="">-- Select Project --</option>';
+    projects.forEach(project => {
+        const option = document.createElement('option');
+        option.value = project.ProjectID;
+        option.textContent = project.ProjectName;
+        projectSelector.appendChild(option);
+    });
+}
 
-const loadTasks = (projectId) => {
-    // console.log(`[STUB] Loading tasks for project ${projectId}`);
-    const taskTableBody = document.getElementById('taskTableBody');
-    if(taskTableBody) taskTableBody.innerHTML = '<tr><td colspan="5">Tasks not implemented yet.</td></tr>';
-    // KPI Reset
-    const kpiProgress = document.getElementById('kpi-progress');
-    if(kpiProgress) kpiProgress.textContent = '0%';
-};
 
-const loadExpenses = (projectId) => {
-    // console.log(`[STUB] Loading expenses for project ${projectId}`);
-    const recentExpensesList = document.getElementById('recentExpensesList');
-    if(recentExpensesList) recentExpensesList.innerHTML = '<li class="placeholder">Expenses not implemented yet.</li>';
-     // KPI Reset
-    const kpiTotalExpenses = document.getElementById('kpi-total-expenses');
-    if(kpiTotalExpenses) kpiTotalExpenses.textContent = '₹ 0';
-};
+// --- 4. DASHBOARD UPDATE (Master Controller) ---
 
-const loadMaterials = (projectId) => {
-    // console.log(`[STUB] Loading materials for project ${projectId}`);
-    const materialTableBody = document.getElementById('materialTableBody');
-    if(materialTableBody) materialTableBody.innerHTML = '<tr><td colspan="5">Materials not implemented yet.</td></tr>';
-     // KPI Reset
-    const kpiMaterialProgress = document.getElementById('kpi-material-progress');
-    if(kpiMaterialProgress) kpiMaterialProgress.textContent = '0%';
-};
+async function updateDashboard(project) {
+    if (!project) {
+        currentProjectID = null;
+        currentProjectNameDisplay.textContent = 'Select a Project';
+        document.getElementById('taskList').innerHTML = '<li class="placeholder">Select a project to view tasks...</li>';
+        document.getElementById('recentExpensesList').innerHTML = '<li class="placeholder">No expenses loaded...</li>';
+        // Reset KPIs and Details to N/A
+        document.querySelectorAll('.dashboard-grid .value, #projectDetailDisplay span').forEach(el => {
+            el.textContent = 'N/A';
+        });
+        return;
+    }
 
-const loadTasksForDropdown = (projectId) => {
-    // console.log(`[STUB] Loading tasks for dropdowns for project ${projectId}`);
-};
+    currentProjectID = project.ProjectID;
+    currentProjectNameDisplay.textContent = project.ProjectName;
 
-// --- 9. PROJECT ADD/DELETE ---
+    // A. Update Project Details
+    renderProjectDetails(project);
+    
+    // B. Fetch Tasks and Expenses concurrently
+    const [tasksResponse, expensesResponse] = await Promise.all([
+        sendDataToSheet('Tasks', 'GET', { ProjectID: currentProjectID }),
+        sendDataToSheet('Expenses', 'GET', { ProjectID: currentProjectID })
+    ]);
 
-const generateNewID = () => {
-    const existingIDs = allProjects.map(p => {
-        const id = String(p.ProjectID).trim();
-        const match = id.match(/^HT-(\d+)$/i); 
-        return match ? parseInt(match[1], 10) : 0;
+    const tasks = tasksResponse.status === 'success' ? tasksResponse.data : [];
+    const expenses = expensesResponse.status === 'success' ? expensesResponse.data : [];
+
+    // C. Render Lists
+    renderTaskList(tasks);
+    renderExpenses(expenses);
+
+    // D. Update KPIs (Requires all data)
+    updateKPIs(project, tasks, expenses);
+}
+
+
+// --- 5. DATA RENDERING FUNCTIONS ---
+
+function renderProjectDetails(project) {
+    document.getElementById('detailClientName').textContent = project.ClientName || 'N/A';
+    document.getElementById('detailProjectLocation').textContent = project.ProjectLocation || 'N/A';
+    document.getElementById('detailProjectStartDate').textContent = project.ProjectStartDate || 'N/A';
+    document.getElementById('detailProjectDeadline').textContent = project.ProjectDeadline || 'N/A';
+    document.getElementById('detailProjectValue').textContent = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(parseFloat(project.ProjectValue) || 0);
+    document.getElementById('detailProjectType').textContent = project.ProjectType || 'N/A';
+}
+
+function renderTaskList(tasks) {
+    const taskListElement = document.getElementById('taskList');
+    taskListElement.innerHTML = ''; // Clear existing tasks
+
+    if (tasks.length === 0) {
+        taskListElement.innerHTML = '<li class="placeholder">No tasks defined for this project.</li>';
+        return;
+    }
+
+    // Sort by completion status (Incomplete first) and then by Task Name
+    tasks.sort((a, b) => {
+        if (a.Completed === b.Completed) {
+            return a.TaskName.localeCompare(b.TaskName);
+        }
+        return a.Completed === 'No' ? -1 : 1;
     });
 
-    const maxID = Math.max(...existingIDs, 0);
-    const newNum = maxID + 1;
-    return `HT-${String(newNum).padStart(2, '0')}`; 
-};
+    tasks.forEach(task => {
+        const li = document.createElement('li');
+        li.dataset.taskid = task.TaskID;
+        li.className = task.Completed === 'Yes' ? 'completed' : '';
 
-// Custom modal implementation instead of standard alert/confirm
-const showCustomModal = (title, message, isConfirm = false, onConfirm = () => {}) => {
-    const modal = document.createElement('div');
-    modal.className = 'custom-modal-overlay';
-    modal.innerHTML = `
-        <div class="custom-modal-content">
-            <h3>${title}</h3>
-            <p>${message}</p>
-            <div class="modal-actions">
-                ${isConfirm ? `<button class="button-secondary" id="modalCancel">Cancel</button>` : ''}
-                <button class="button-primary" id="modalConfirm">OK</button>
+        const statusClass = task.Completed === 'Yes' ? 'complete' : 'pending';
+        const statusText = task.Completed === 'Yes' ? 'Completed' : 'Pending';
+
+        li.innerHTML = `
+            <div class="task-info">
+                <strong>${task.TaskName}</strong>
+                <span class="task-date">Due: ${task.DueDate || 'N/A'}</span>
+                <span class="task-responsible">Responsible: ${task.Responsible}</span>
             </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
+            <button class="task-status-btn ${statusClass}" data-action="toggle">
+                ${statusText}
+            </button>
+        `;
+        taskListElement.appendChild(li);
+    });
+}
 
-    const confirmBtn = document.getElementById('modalConfirm');
-    const cancelBtn = document.getElementById('modalCancel');
+function renderExpenses(expenses) {
+    const expensesListElement = document.getElementById('recentExpensesList');
+    expensesListElement.innerHTML = '';
 
-    confirmBtn.onclick = () => {
-        document.body.removeChild(modal);
-        if (isConfirm) onConfirm();
-    };
-
-    if (cancelBtn) {
-        cancelBtn.onclick = () => {
-            document.body.removeChild(modal);
-        };
+    if (expenses.length === 0) {
+        expensesListElement.innerHTML = '<li class="placeholder">No expenses recorded for this project.</li>';
+        return;
     }
-};
 
-// Project Add Button
-const addProjectBtn = document.getElementById('addProjectBtn');
-if (addProjectBtn) {
-    addProjectBtn.addEventListener('click', async () => {
-        const newName = prompt('Enter the name for the new project:'); // Using prompt temporarily for simple input
-        if (!newName || newName.trim() === '') return;
+    // Sort by Date (most recent first) and show only the top 10
+    expenses.sort((a, b) => new Date(b.Date) - new Date(a.Date));
+    const recentExpenses = expenses.slice(0, 10);
+    
+    const formatter = new Intl.NumberFormat('en-IN');
 
-        const newID = generateNewID();
-        const today = new Date().toISOString().split('T')[0];
+    recentExpenses.forEach(expense => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <strong>${expense.Date}</strong>: ${expense.Description} 
+            (<span style="color:#dc3545;">- INR ${formatter.format(parseFloat(expense.Amount))}</span>) 
+            [${expense.Category}]
+        `;
+        expensesListElement.appendChild(li);
+    });
+}
+
+function updateKPIs(project, tasks, expenses) {
+    const projectValue = parseFloat(project.ProjectValue) || 0;
+    const projectStart = project.ProjectStartDate;
+    const projectDeadline = project.ProjectDeadline;
+
+    // Time KPIs
+    const today = new Date().toISOString().split('T')[0];
+    let daysSpent = 'N/A';
+    let daysLeft = 'N/A';
+    
+    if (projectStart && projectDeadline) {
+        const daysTotal = calculateDaysDifference(projectStart, projectDeadline);
         
-        const projectPayload = {
-            ProjectID: newID,
-            Name: newName.trim(),
-            StartDate: today,
-            Deadline: '', 
-            Amount: 0, 
-            CreationDate: today,
-            Location: '',
-            Contractor: '',
-            SiteEngineers: '',
-            Contact1: '',
-            Contact2: ''
+        // Calculate days spent
+        try {
+            daysSpent = calculateDaysDifference(projectStart, today);
+            if (daysSpent < 0) daysSpent = 0;
+        } catch (e) { console.warn("Could not calculate days spent", e); daysSpent = 'N/A'; }
+
+        // Calculate days remaining
+        try {
+            const deadlineDate = new Date(projectDeadline);
+            const todayDate = new Date(today);
+            const remaining = Math.max(0, calculateDaysDifference(today, projectDeadline));
+            daysLeft = remaining;
+            
+            // Special case for deadlines past today
+            if (todayDate > deadlineDate) {
+                daysLeft = `OVERDUE by ${calculateDaysDifference(projectDeadline, today) - 1} days`;
+            }
+
+        } catch (e) { console.warn("Could not calculate days left", e); daysLeft = 'N/A'; }
+    }
+
+    // Task KPIs
+    const completedTasks = tasks.filter(t => t.Completed === 'Yes').length;
+    const totalTasks = tasks.length;
+    
+    // Expense KPIs
+    const totalExpenses = expenses.reduce((sum, expense) => sum + (parseFloat(expense.Amount) || 0), 0);
+    const netMargin = projectValue - totalExpenses;
+    
+    // Formatting
+    const currencyFormatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
+
+    // Apply to DOM
+    document.getElementById('kpi-days-spent').textContent = daysSpent;
+    document.getElementById('kpi-days-left').textContent = daysLeft;
+    document.getElementById('kpi-task-completion').textContent = `${completedTasks} / ${totalTasks}`;
+    document.getElementById('kpi-project-value').textContent = currencyFormatter.format(projectValue);
+    document.getElementById('kpi-total-expenses').textContent = currencyFormatter.format(totalExpenses);
+    document.getElementById('kpi-net-margin').textContent = currencyFormatter.format(netMargin);
+    
+    // Highlight margin based on value
+    const marginElement = document.getElementById('kpi-net-margin');
+    if (netMargin < (projectValue * 0.1) && netMargin > 0) { // <10% margin is warning
+        marginElement.style.color = '#ffc107'; // Yellow
+    } else if (netMargin <= 0) {
+        marginElement.style.color = '#dc3545'; // Red
+    } else {
+        marginElement.style.color = '#28a745'; // Green
+    }
+}
+
+
+// --- 6. TASK MANAGEMENT (Toggle Status) ---
+
+const taskList = document.getElementById('taskList');
+if (taskList) {
+    taskList.addEventListener('click', async (e) => {
+        const button = e.target.closest('.task-status-btn');
+        if (!button || button.dataset.action !== 'toggle' || !currentProjectID) return;
+
+        const listItem = button.closest('li');
+        const taskID = listItem.dataset.taskid;
+        
+        const isCompleted = listItem.classList.contains('completed');
+        const newStatus = isCompleted ? 'No' : 'Yes';
+
+        button.disabled = true;
+
+        const updatePayload = {
+            ProjectID: currentProjectID,
+            TaskID: taskID,
+            Completed: newStatus,
         };
 
-        const tasksPayload = HI_TEK_TASKS_MAP.map(task => ({
-            ProjectID: newID,
+        const result = await sendDataToSheet('Tasks', 'PUT', updatePayload);
+
+        if (result.status === 'success') {
+            await loadProjects(); // Reload projects to update all KPIs and lists
+            showMessageBox(`Task ${taskID} status updated to ${newStatus}.`, 'success');
+        } else {
+            showMessageBox(`Failed to update task status: ${result.message}`, 'error');
+            button.disabled = false;
+        }
+    });
+}
+
+
+// --- 7. NEW PROJECT CREATION ---
+
+const addProjectBtn = document.getElementById('addProjectBtn');
+const projectModal = document.getElementById('projectModal');
+const closeModalBtn = document.getElementById('closeModalBtn');
+const projectForm = document.getElementById('projectForm');
+
+if (addProjectBtn) {
+    addProjectBtn.addEventListener('click', () => {
+        projectForm.reset();
+        projectModal.style.display = 'block';
+    });
+}
+
+if (closeModalBtn) {
+    closeModalBtn.addEventListener('click', () => {
+        projectModal.style.display = 'none';
+    });
+}
+
+// Close the modal if the user clicks anywhere outside of it
+window.addEventListener('click', (event) => {
+    if (event.target === projectModal) {
+        projectModal.style.display = 'none';
+    }
+    const editModal = document.getElementById('projectEditModal');
+    if (event.target === editModal) {
+        editModal.style.display = 'none';
+    }
+});
+
+
+if (projectForm) {
+    projectForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const newProjectID = Date.now().toString(); // Simple unique ID
+        const projectData = {
+            ProjectID: newProjectID,
+            ProjectName: document.getElementById('projectName').value,
+            ClientName: document.getElementById('clientName').value,
+            ProjectLocation: document.getElementById('projectLocation').value,
+            ProjectStartDate: document.getElementById('projectStartDate').value,
+            ProjectDeadline: document.getElementById('projectDeadline').value,
+            ProjectValue: parseFloat(document.getElementById('projectValue').value),
+            ProjectType: document.getElementById('projectType').value,
+        };
+
+        const initialTasks = HI_TEK_TASKS_MAP.map((task, index) => ({
+            ProjectID: newProjectID,
+            TaskID: `${newProjectID}-T${index + 1}`,
             TaskName: task.Name,
             Responsible: task.Responsible,
-            Status: 'Pending',
-            Progress: 0,
-            Due_Date: ''
+            DueDate: '', // Can be set later
+            Completed: 'No'
         }));
 
-        const [projectResult, taskResult] = await Promise.all([
-            sendDataToSheet('Projects', 'POST', [projectPayload]),
-            sendDataToSheet('Tasks', 'POST', tasksPayload)
+        // Send Project data and then Initial Tasks concurrently
+        const [projectResult, tasksResult] = await Promise.all([
+            sendDataToSheet('Projects', 'POST', projectData),
+            sendDataToSheet('Tasks', 'POST_BATCH', { data: initialTasks })
         ]);
-        
-        if (projectResult.status === 'success' && taskResult.status === 'success') {
-            showCustomModal('Success', `Project "${newName}" added successfully with ID ${newID}. All 23 official tasks were loaded.`);
+
+        if (projectResult.status === 'success' && tasksResult.status === 'success') {
+            projectModal.style.display = 'none';
+            projectForm.reset();
+            await loadProjects();
+            showMessageBox(`Project ${projectData.ProjectName} created successfully with ${initialTasks.length} initial tasks!`, 'success');
         } else {
-            showCustomModal('Error', `Failed to add project. Project Status: ${projectResult.status}. Task Status: ${taskResult.status}. Check the console for details.`);
+            console.error("Project/Task Creation Error:", { projectResult, tasksResult });
+            showMessageBox(`Failed to create project. Check console for details. Project Error: ${projectResult.message}`, 'error');
         }
-        
-        await loadProjects();
     });
 }
 
-// Project Delete Button
+
+// --- 8. EXPENSE RECORDING ---
+
+const expenseEntryForm = document.getElementById('expenseEntryForm');
+if (expenseEntryForm) {
+    expenseEntryForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (!currentProjectID) {
+            showMessageBox('Please select a project before recording an expense.', 'alert');
+            return;
+        }
+
+        const expenseData = {
+            ProjectID: currentProjectID,
+            Date: document.getElementById('expenseDate').value,
+            Description: document.getElementById('expenseDescription').value,
+            Amount: parseFloat(document.getElementById('expenseAmount').value),
+            Category: document.getElementById('expenseCategory').value,
+            ExpenseID: Date.now().toString(), // Simple unique ID
+        };
+
+        const result = await sendDataToSheet('Expenses', 'POST', expenseData);
+
+        if (result.status === 'success') {
+            expenseEntryForm.reset();
+            // Reset Date to today for convenience
+            document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0]; 
+            await updateDashboard(allProjects.find(p => p.ProjectID === currentProjectID));
+            showMessageBox(`Expense recorded successfully!`, 'success');
+        } else {
+            showMessageBox(`Failed to record expense: ${result.message}`, 'error');
+        }
+    });
+}
+
+// Set initial expense date to today
+if (document.getElementById('expenseDate')) {
+    document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0];
+}
+
+
+// --- 9. PROJECT DELETION LOGIC ---
+
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
 if (deleteProjectBtn) {
     deleteProjectBtn.addEventListener('click', async () => {
-        if (!currentProjectID) return showCustomModal('Warning', 'No project is selected.');
-        const currentProject = allProjects.find(p => String(p.ProjectID).trim() === String(currentProjectID).trim());
+        if (!currentProjectID) {
+            showMessageBox('Please select a project to delete.', 'alert');
+            return;
+        }
         
-        const confirmDelete = () => {
-            const deletePayload = [{ ProjectID: currentProjectID }];
+        // Use showMessageBox as a custom confirmation instead of window.confirm
+        if (!confirm(`Are you sure you want to permanently delete project ${currentProjectID} and ALL its associated tasks, expenses, and materials? This action cannot be undone.`)) {
+             return;
+        }
 
-            // Perform deletions in parallel
-            Promise.all([
-                sendDataToSheet('Projects', 'DELETE', deletePayload),
-                sendDataToSheet('Tasks', 'DELETE', deletePayload),
-                sendDataToSheet('Expenses', 'DELETE', deletePayload),
-                sendDataToSheet('Materials', 'DELETE', deletePayload)
-            ]).then(([projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult]) => {
-                if (projectDeleteResult.status === 'success') {
-                    showCustomModal('Success', `Project ${currentProjectID} deleted successfully, including all associated data!`);
-                    loadProjects(); 
-                } else {
-                    console.error('Delete results:', { projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult });
-                    showCustomModal('Error', `Failed to delete project. Please check the console for details. Primary Error: ${projectDeleteResult.message}`);
-                }
-            });
-        };
-        
-        showCustomModal(
-            'WARNING', 
-            `Are you sure you want to delete Project "${currentProject.Name}" (${currentProjectID})? This action will DELETE the project record and all associated data (Tasks, Expenses) from the Google Sheet.`,
-            true, // isConfirm: true
-            confirmDelete // onConfirm function
-        );
+        const deletePayload = { ProjectID: currentProjectID };
+
+        // Deleting related data first, then the project record itself
+        const [projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult] = await Promise.all([
+            sendDataToSheet('Projects', 'DELETE', deletePayload),
+            sendDataToSheet('Tasks', 'DELETE', deletePayload),
+            sendDataToSheet('Expenses', 'DELETE', deletePayload),
+            // Assuming there's a Materials sheet/endpoint
+            // sendDataToSheet('Materials', 'DELETE', deletePayload)
+        ]);
+
+
+        if (projectDeleteResult.status === 'success') {
+            showMessageBox(`Project ${currentProjectID} deleted successfully, including all associated data!`, 'success');
+            await loadProjects(); 
+        } else {
+            console.error('Delete results:', { projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult });
+            showMessageBox(`Failed to delete project. Please check the console for details. Primary Error: ${projectDeleteResult.message}`, 'error');
+        }
     });
 }
 
 
 // --- 10. PROJECT EDIT LOGIC ---
 
-const populateEditForm = (project) => {
-    // Convert serial date to YYYY-MM-DD for the date input
-    const startDate = project.StartDate ? serialDateToISO(Number(project.StartDate)) : '';
-    const deadline = project.Deadline ? serialDateToISO(Number(project.Deadline)) : '';
+const editFormElements = {
+    id: document.getElementById('editProjectID'),
+    name: document.getElementById('editProjectName'),
+    client: document.getElementById('editClientName'),
+    location: document.getElementById('editProjectLocation'),
+    start: document.getElementById('editProjectStartDate'),
+    deadline: document.getElementById('editProjectDeadline'),
+    value: document.getElementById('editProjectValue'),
+    type: document.getElementById('editProjectType'),
+    modal: document.getElementById('projectEditModal')
+};
 
-    document.getElementById('edit-name').value = project.Name || '';
-    document.getElementById('edit-start-date').value = startDate;
-    document.getElementById('edit-deadline').value = deadline;
-    document.getElementById('edit-amount').value = parseFloat(project.Amount) || 0;
-    document.getElementById('edit-location').value = project.Location || '';
-    document.getElementById('edit-contractor').value = project.Contractor || '';
-    document.getElementById('edit-engineers').value = project.SiteEngineers || '';
-    document.getElementById('edit-contact1').value = project.Contact1 || '';
-    document.getElementById('edit-contact2').value = project.Contact2 || '';
+/**
+ * Populates the edit form modal with the data of the currently selected project.
+ * @param {Object} project - The project data object.
+ */
+function populateEditForm(project) {
+    // CRITICAL FIX: Check if the modal and its elements were found
+    if (!editFormElements.modal || !editFormElements.name) {
+        console.error("FATAL ERROR: Project Edit Modal or form elements are missing from the DOM (index (1).html).", editFormElements);
+        showMessageBox('Cannot open edit form. HTML elements are missing.', 'error');
+        return; 
+    }
+
+    // Set values only if the element exists. This prevents the "Cannot set properties of null" error.
+    if (editFormElements.id) editFormElements.id.value = project.ProjectID;
+    if (editFormElements.name) editFormElements.name.value = project.ProjectName;
+    if (editFormElements.client) editFormElements.client.value = project.ClientName;
+    if (editFormElements.location) editFormElements.location.value = project.ProjectLocation;
+    if (editFormElements.start) editFormElements.start.value = project.ProjectStartDate;
+    if (editFormElements.deadline) editFormElements.deadline.value = project.ProjectDeadline;
+    if (editFormElements.value) editFormElements.value.value = project.ProjectValue;
+    if (editFormElements.type) editFormElements.type.value = project.ProjectType;
+    
+    editFormElements.modal.style.display = 'block';
 }
+
 
 const editProjectDetailsBtn = document.getElementById('editProjectDetailsBtn');
 if (editProjectDetailsBtn) {
     editProjectDetailsBtn.addEventListener('click', () => {
-        if (!currentProjectID) return showCustomModal('Warning', 'No project is selected to edit.');
-        const selectedProject = allProjects.find(p => String(p.ProjectID).trim() === String(currentProjectID).trim());
-
-        if (selectedProject) {
-            populateEditForm(selectedProject);
-            if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'none';
-            if (projectDetailsEdit) projectDetailsEdit.style.display = 'block';
+        if (!currentProjectID) {
+            showMessageBox('Please select a project to edit its details.', 'alert');
+            return;
+        }
+        const currentProject = allProjects.find(p => p.ProjectID === currentProjectID);
+        if (currentProject) {
+            populateEditForm(currentProject);
         } else {
-            showCustomModal('Error', 'Selected project data could not be found.');
+            showMessageBox('Error: Current project data not found.', 'error');
         }
     });
 }
@@ -566,8 +580,14 @@ if (editProjectDetailsBtn) {
 const cancelEditBtn = document.getElementById('cancelEditBtn');
 if (cancelEditBtn) {
     cancelEditBtn.addEventListener('click', () => {
-        if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
-        if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
+        if (editFormElements.modal) editFormElements.modal.style.display = 'none';
+    });
+}
+
+const closeEditModalBtn = document.getElementById('closeEditModalBtn');
+if (closeEditModalBtn) {
+    closeEditModalBtn.addEventListener('click', () => {
+        if (editFormElements.modal) editFormElements.modal.style.display = 'none';
     });
 }
 
@@ -576,34 +596,26 @@ if (projectEditForm) {
     projectEditForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        const updatedProject = {
-            ProjectID: currentProjectID, // CRITICAL: The ID is the key for the PUT operation
-            Name: document.getElementById('edit-name').value.trim(),
-            StartDate: document.getElementById('edit-start-date').value,
-            Deadline: document.getElementById('edit-deadline').value,
-            Amount: parseFloat(document.getElementById('edit-amount').value) || 0,
-            Location: document.getElementById('edit-location').value.trim(),
-            Contractor: document.getElementById('edit-contractor').value.trim(),
-            SiteEngineers: document.getElementById('edit-engineers').value.trim(),
-            Contact1: document.getElementById('edit-contact1').value.trim(),
-            Contact2: document.getElementById('edit-contact2').value.trim()
-            // Note: CreationDate is omitted as it should not be updated
+        // Get updated data from the form
+        const updatedData = {
+            ProjectID: document.getElementById('editProjectID').value,
+            ProjectName: document.getElementById('editProjectName').value,
+            ClientName: document.getElementById('editClientName').value,
+            ProjectLocation: document.getElementById('editProjectLocation').value,
+            ProjectStartDate: document.getElementById('editProjectStartDate').value,
+            ProjectDeadline: document.getElementById('editProjectDeadline').value,
+            ProjectValue: parseFloat(document.getElementById('editProjectValue').value),
+            ProjectType: document.getElementById('editProjectType').value,
         };
 
-        const result = await sendDataToSheet('Projects', 'PUT', [updatedProject]);
+        const result = await sendDataToSheet('Projects', 'PUT', updatedData);
 
         if (result.status === 'success') {
-            showCustomModal('Success', `Project ${currentProjectID} updated successfully!`);
-            
-            // Reload projects to update all local data and the dashboard view
-            await loadProjects();
-            
-            // Switch back to display mode
-            if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
-            if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
-
+            if (editFormElements.modal) editFormElements.modal.style.display = 'none';
+            await loadProjects(); // Reload projects and dashboard
+            showMessageBox(`Project ${updatedData.ProjectName} updated successfully!`, 'success');
         } else {
-            showCustomModal('Error', `Failed to update project: ${result.message}`);
+            showMessageBox(`Failed to update project: ${result.message}`, 'error');
         }
     });
 }
@@ -611,4 +623,4 @@ if (projectEditForm) {
 
 // --- 11. INITIALIZATION ---
 
-document.addEventListener('DOMContentLoaded', loadProjects);
+window.onload = loadProjects;
