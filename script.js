@@ -50,11 +50,25 @@ const HI_TEK_TASKS_MAP = [
  * Sends data to the Google Sheets API proxy.
  * @param {string} sheetName - The name of the sheet to interact with (e.g., 'Projects', 'Tasks').
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST', 'PUT', 'DELETE').
- * @param {Object} data - The payload to send (will be JSON stringified).
+ * @param {Object} data - The payload to send (for POST/PUT, this is the record; for POST_BATCH, this is {data: [...]}).
  * @returns {Promise<Object>} The JSON response from the API.
  */
 async function sendDataToSheet(sheetName, method, data = {}) {
-    const payload = { ...data, sheetName, method };
+    let payload = { sheetName, method };
+
+    // Structure the payload based on the method type
+    if (['POST', 'PUT', 'DELETE'].includes(method)) {
+        // For single-record operations, wrap the data in a 'record' key.
+        // This prevents the record properties from mixing with sheetName/method.
+        payload.record = data;
+    } else if (method.includes('BATCH')) {
+        // For batch operations (like POST_BATCH), assume the data object already contains
+        // the required keys (e.g., { data: [...] }) and spread it.
+        payload = { ...payload, ...data };
+    } else {
+        // For GET operations (where 'data' contains query params like ProjectID), spread it
+        payload = { ...payload, ...data };
+    }
     
     // Convert GET to POST for Google Apps Script compatibility,
     // sending all query parameters in the body.
