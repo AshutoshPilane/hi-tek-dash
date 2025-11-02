@@ -1,8 +1,9 @@
 // ==============================================================================
-// script.js: FINAL VERSION (Vercel Redirect Fix)
+// script.js: FINAL OPERATIONAL VERSION (Apps Script Compatibility Fix)
 // ==============================================================================
 
 // 🎯 CRITICAL: This is the relative path that Vercel will redirect to your Apps Script URL.
+// Ensure you have a vercel.json file in your project root with the rewrite rule.
 const SHEET_API_URL = "/api"; 
 
 let currentProjectID = null; 
@@ -35,7 +36,7 @@ const HI_TEK_TASKS_MAP = [
     { Name: '23. Feedback Collection', Responsible: 'Project Manager' }
 ];
 
-// --- 2. API UTILITY FUNCTIONS (SheetDB Format) ---
+// --- 2. API UTILITY FUNCTIONS (Apps Script Format) ---
 
 /**
  * Fetches data from a specified sheet (GET request).
@@ -59,25 +60,33 @@ const fetchDataFromSheet = async (sheetName) => {
 };
 
 /**
- * Sends data to a specified sheet (POST/PUT/DELETE request) using SheetDB structure.
+ * Sends data to a specified sheet (POST/PUT/DELETE request) to the Apps Script Web App.
+ * FIX: All requests to Apps Script are POST, and the intended action (method) is passed in the body.
  */
 const sendDataToSheet = async (sheetName, method, payload) => {
     const url = `${SHEET_API_URL}?sheet=${sheetName}`;
     
-    const wrappedPayload = method === 'POST' || method === 'PUT' ? { sheet: sheetName, data: payload } : null;
+    // Correct structure for Google Apps Script POST/PUT/DELETE
+    const finalPayload = {
+        sheet: sheetName,
+        method: method, // The Apps Script reads this to know the intended CRUD operation
+        data: payload
+    };
 
     try {
         const response = await fetch(url, {
-            method: method,
+            method: 'POST', // All fetch calls to Apps Script must be POST
             mode: 'cors',
             headers: { 'Content-Type': 'application/json' },
-            body: wrappedPayload ? JSON.stringify(wrappedPayload) : null
+            body: JSON.stringify(finalPayload)
         });
 
         const result = await response.json();
         
-        if (!response.ok) {
+        // Check for fetch error or error status returned by the script
+        if (!response.ok || (result && result.status === 'error')) {
             console.error('API Response Error:', result);
+            // Use the script's error message if available
             throw new Error(`API Request Failed (${response.status}): ${result.message || 'Unknown error'}`);
         }
 
@@ -358,7 +367,7 @@ const loadTasks = async (projectID) => {
     }
 };
 
-// --- 6. TASK UPDATE PANEL (FIX for Issue 3) ---
+// --- 6. TASK UPDATE PANEL (FIX for Apps Script PUT) ---
 
 const taskUpdateForm = document.getElementById('updateTaskForm');
 const taskToUpdateSelector = document.getElementById('taskToUpdateSelector');
@@ -415,40 +424,28 @@ if (taskUpdateForm) {
             return;
         }
 
-        // Payload for SheetDB PUT (Update)
+        // Payload for PUT (Update). Includes ProjectID and TaskName for conditional update in Apps Script.
         const updatePayload = {
+            ProjectID: currentProjectID, 
+            TaskName: selectedTaskName,
             Progress: parseInt(newProgress, 10),
             Status: newStatus,
             LastUpdated: new Date().toISOString().split('T')[0]
         };
         
-        // SheetDB PUT (Update) the row where ProjectID and TaskName match
-        const url = `${SHEET_API_URL}?sheet=Tasks&ProjectID=${currentProjectID}&TaskName=${encodeURIComponent(selectedTaskName)}`;
-        
-        try {
-            const response = await fetch(url, {
-                method: 'PUT',
-                mode: 'cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatePayload) 
-            });
+        // Use the fixed sendDataToSheet for the PUT operation
+        const result = await sendDataToSheet('Tasks', 'PUT', [updatePayload]); 
 
-            const result = await response.json();
+        if (result.status === 'success') {
+            alert(`Task "${selectedTaskName}" updated successfully!`);
             
-            if (response.ok) {
-                alert(`Task "${selectedTaskName}" updated successfully!`);
-                
-                await loadTasks(currentProjectID); // Reload table
-                await loadTasksForDropdown(currentProjectID); // Reload dropdown
-                
-                taskUpdateForm.reset();
-            } else {
-                console.error('Task Update Failed:', result);
-                alert(`Failed to update task. Error: ${result.message || 'Unknown API Error'}`);
-            }
-        } catch (error) {
-            console.error('Fetch Error:', error);
-            alert('An error occurred while communicating with the SheetDB API.');
+            await loadTasks(currentProjectID); // Reload table
+            await loadTasksForDropdown(currentProjectID); // Reload dropdown
+            
+            taskUpdateForm.reset();
+        } else {
+            console.error('Task Update Failed:', result.message);
+            alert(`Failed to update task. Error: ${result.message}`);
         }
     });
 }
@@ -520,6 +517,7 @@ document.getElementById('expenseEntryForm').addEventListener('submit', async (e)
         RecordedBy: 'User Admin' 
     };
     
+    // Use the fixed sendDataToSheet
     const result = await sendDataToSheet('Expenses', 'POST', [payload]);
 
     if (result.status === 'success') {
@@ -532,7 +530,7 @@ document.getElementById('expenseEntryForm').addEventListener('submit', async (e)
 });
 
 
-// --- 8. MATERIAL ENTRY & DISPLAY (FIX for Issue 2) ---
+// --- 8. MATERIAL ENTRY & DISPLAY (FIX for Apps Script PUT) ---
 
 /**
  * Loads and displays materials for the current project.
@@ -609,40 +607,39 @@ document.getElementById('recordDispatchForm').addEventListener('submit', async (
     const dispatchQuantity = parseFloat(form.elements['dispatchQuantity'].value) || 0;
     const materialUnit = form.elements['materialUnit'].value;
 
-    let payload;
-    let url;
+    let finalPayload = [];
     let method;
     let successMessage;
     
     if (materialItemId) {
         // SCENARIO 1: UPDATE EXISTING MATERIAL (PUT)
         method = 'PUT';
-        url = `${SHEET_API_URL}?sheet=Materials&ItemID=${materialItemId}`;
-        payload = { 
-            // FIX: Convert numbers to strings for reliable SheetDB update
+        // Payload must include ProjectID and ItemID for the Apps Script to find the row
+        finalPayload = [{ 
+            ProjectID: String(currentProjectID).trim(),
+            ItemID: materialItemId, 
             Dispatched_Qty: String(dispatchQuantity), 
             Unit: materialUnit
-        };
+        }];
         successMessage = `Material (ID: ${materialItemId}) updated successfully!`;
 
     } else if (newMaterialName && materialUnit) {
         // SCENARIO 2: ADD NEW MATERIAL (POST)
         const newItemID = `${currentProjectID}-${newMaterialName.trim().replace(/\s/g, '-')}-${new Date().getTime()}`; 
         method = 'POST';
-        url = `${SHEET_API_URL}?sheet=Materials`;
         
         const balanceQty = requiredQuantity - dispatchQuantity;
         
-        payload = {
+        finalPayload = [{
             ProjectID: String(currentProjectID).trim(),
             ItemID: newItemID,
             Item_Name: newMaterialName,
-            // FIX for Issue 2: Explicitly convert numbers to strings 
+            // FIX: Explicitly convert numbers to strings for reliable Apps Script/Sheet storage
             Required_Qty: String(requiredQuantity),
             Dispatched_Qty: String(dispatchQuantity),
             Balance_Qty: String(balanceQty),
             Unit: materialUnit
-        };
+        }];
         successMessage = `New material "${newMaterialName}" recorded successfully!`;
         
     } else {
@@ -650,27 +647,16 @@ document.getElementById('recordDispatchForm').addEventListener('submit', async (
         return;
     }
 
-    try {
-        const response = await fetch(url, {
-            method: method,
-            mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(method === 'POST' ? { data: [payload] } : payload) 
-        });
+    // Use the fixed sendDataToSheet for both POST and PUT
+    const result = await sendDataToSheet('Materials', method, finalPayload); 
 
-        const result = await response.json();
-        
-        if (response.ok) {
-            alert(successMessage);
-            form.reset();
-            await loadMaterials(currentProjectID); // Reload the list
-        } else {
-            console.error('Material API Error:', result);
-            alert(`Failed to record material. Error: ${result.message || 'Unknown API Error'}`);
-        }
-    } catch (error) {
-        console.error('Material Fetch Error:', error);
-        alert('An error occurred while processing the material request.');
+    if (result.status === 'success') {
+        alert(successMessage);
+        form.reset();
+        await loadMaterials(currentProjectID); // Reload the list
+    } else {
+        console.error('Material API Error:', result.message);
+        alert(`Failed to record material. Error: ${result.message}`);
     }
 });
 
@@ -714,6 +700,7 @@ document.getElementById('addProjectBtn').addEventListener('click', async () => {
         Due_Date: ''
     }));
 
+    // FIX APPLIED HERE: The fixed sendDataToSheet function is used.
     const [projectResult, taskResult] = await Promise.all([
         sendDataToSheet('Projects', 'POST', [projectPayload]),
         sendDataToSheet('Tasks', 'POST', tasksPayload)
@@ -736,27 +723,24 @@ document.getElementById('deleteProjectBtn').addEventListener('click', async () =
         return; 
     }
     
-    const deleteUrls = [
-    `${SHEET_API_URL}?sheet=Projects&ProjectID=${currentProjectID}`,
-    `${SHEET_API_URL}?sheet=Tasks&ProjectID=${currentProjectID}`,
-    `${SHEET_API_URL}?sheet=Expenses&ProjectID=${currentProjectID}`,
-    `${SHEET_API_URL}?sheet=Materials&ProjectID=${currentProjectID}`
-];
+    // FIX APPLIED HERE: Use sendDataToSheet with DELETE method for all sheets
+    const deletePayload = [{ ProjectID: currentProjectID }];
 
-    const results = await Promise.all(deleteUrls.map(url => fetch(url, { method: 'DELETE' })));
-    const jsonResults = await Promise.all(results.map(res => {
-        if (res.ok) return res.json();
-        return { error: `HTTP Status ${res.status}` };
-    }));
+    const [projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult] = await Promise.all([
+        sendDataToSheet('Projects', 'DELETE', deletePayload),
+        sendDataToSheet('Tasks', 'DELETE', deletePayload),
+        sendDataToSheet('Expenses', 'DELETE', deletePayload),
+        sendDataToSheet('Materials', 'DELETE', deletePayload)
+    ]);
 
-    const primaryDeleteSuccess = jsonResults[0] && jsonResults[0].deleted; 
 
-    if (primaryDeleteSuccess) {
+    // Check if the primary delete (Projects sheet) was successful
+    if (projectDeleteResult.status === 'success') {
         alert(`Project ${currentProjectID} deleted successfully, including all associated data!`);
         await loadProjects(); 
     } else {
-        console.error('Delete results:', jsonResults);
-        alert(`Failed to delete project. Please check the console. Error: ${jsonResults[0].error || 'Unknown error'}`);
+        console.error('Delete results:', { projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult });
+        alert(`Failed to delete project. Please check the console for details. Primary Error: ${projectDeleteResult.message}`);
     }
 });
 
@@ -782,62 +766,56 @@ document.getElementById('editProjectDetailsBtn').addEventListener('click', () =>
     document.getElementById('input-contact1').value = project.Contact1 || '';
     document.getElementById('input-contact2').value = project.Contact2 || '';
 
+    // Switch view
     if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'none';
     if (projectDetailsEdit) projectDetailsEdit.style.display = 'block';
 });
 
-document.getElementById('saveProjectDetailsBtn').addEventListener('click', async () => {
-    const newName = document.getElementById('input-name').value;
-    const newStartDate = document.getElementById('input-start-date').value;
-    const newDeadline = document.getElementById('input-deadline').value;
-    const newLocation = document.getElementById('input-location').value;
-    const newAmount = document.getElementById('input-amount').value;
-    const newContractor = document.getElementById('input-contractor').value;
-    const newEngineers = document.getElementById('input-engineers').value;
-    const newContact1 = document.getElementById('input-contact1').value;
-    const newContact2 = document.getElementById('input-contact2').value;
+document.getElementById('cancelEditBtn').addEventListener('click', () => {
+    if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
+    if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
+});
 
-    if (!currentProjectID) return;
+document.getElementById('projectEditForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    if (!currentProjectID) {
+        alert('No project selected for update.');
+        return;
+    }
+
+    const form = e.target;
 
     const updatePayload = {
-        Name: newName,
-        StartDate: newStartDate, 
-        Deadline: newDeadline,   
-        Location: newLocation,
-        Amount: parseFloat(newAmount) || 0,
-        Contractor: newContractor,
-        Engineers: newEngineers,
-        Contact1: newContact1,
-        Contact2: newContact2
+        ProjectID: currentProjectID, // Key for conditional update
+        Name: form.elements['input-name'].value,
+        StartDate: form.elements['input-start-date'].value,
+        Deadline: form.elements['input-deadline'].value,
+        Location: form.elements['input-location'].value,
+        Amount: String(parseFloat(form.elements['input-amount'].value) || 0),
+        Contractor: form.elements['input-contractor'].value,
+        Engineers: form.elements['input-engineers'].value,
+        Contact1: form.elements['input-contact1'].value,
+        Contact2: form.elements['input-contact2'].value
     };
-    
-    const url = `${SHEET_API_URL}/ProjectID/${currentProjectID}?sheet=Projects`;
-    
-    try {
-        const response = await fetch(url, {
-            method: 'PUT',
-            mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updatePayload) 
-        });
 
-        const result = await response.json();
+    // Use the fixed sendDataToSheet for the PUT operation
+    const result = await sendDataToSheet('Projects', 'PUT', [updatePayload]);
+
+    if (result.status === 'success') {
+        alert('Project details updated successfully!');
         
-        if (response.ok) {
-            alert('Project details updated successfully!');
-            
-            await loadProjects(); 
-            handleProjectSelection(currentProjectID);
+        // Reload projects to update the selector and dashboard
+        await loadProjects(); 
+        handleProjectSelection(currentProjectID); // Re-select the current project to display new details
+        
+        // Switch back to display view
+        if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
+        if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
 
-            if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
-            if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
-        } else {
-            console.error('Update Failed:', result);
-            alert(`Failed to update project. Error: ${result.message || 'Unknown API Error'}`);
-        }
-    } catch (error) {
-        console.error('Fetch Error:', error);
-        alert('An error occurred while communicating with the SheetDB API.');
+    } else {
+        console.error('Project Update Failed:', result.message);
+        alert(`Failed to update project. Error: ${result.message}`);
     }
 });
 
@@ -845,5 +823,3 @@ document.getElementById('saveProjectDetailsBtn').addEventListener('click', async
 // --- 11. INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', loadProjects);
-
-
