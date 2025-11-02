@@ -56,15 +56,10 @@ const HI_TEK_TASKS_MAP = [
 async function sendDataToSheet(sheetName, method, data = {}) {
     let payload = { sheetName, method };
 
-    // Structure the payload based on the method type
-    if (['POST', 'PUT', 'DELETE'].includes(method)) {
-        // Single record operation (Project creation, Task update, Expense creation, single record deletion)
-        // Uses 'data' key for single object.
-        payload.data = data;
-    } else if (method.includes('BATCH')) {
-        // Batch operation (Initial tasks creation)
-        // CRITICAL FIX: Expects 'data' to be the array of records. Uses 'records' key for array submission.
-        payload.records = data; 
+    // FIX: Standardize all mutation operations (POST, PUT, DELETE, and BATCH) 
+    // to use the 'data' key, which is the most common expectation for Apps Script endpoints.
+    if (['POST', 'PUT', 'DELETE'].includes(method) || method.includes('BATCH')) {
+        payload.data = data; 
     } else {
         // For GET operations (where 'data' contains query params like ProjectID), spread it
         payload = { ...payload, ...data };
@@ -440,7 +435,7 @@ if (projectForm) {
         // Send Project data (single POST) and then Initial Tasks (POST_BATCH) concurrently
         const [projectResult, tasksResult] = await Promise.all([
             sendDataToSheet('Projects', 'POST', projectData),
-            // FIX: Pass the array of tasks directly for POST_BATCH
+            // NOTE: sendDataToSheet will now use the 'data' key for this array.
             sendDataToSheet('Tasks', 'POST_BATCH', initialTasks) 
         ]);
 
@@ -606,7 +601,8 @@ if (cancelEditBtn) {
 const closeEditModalBtn = document.getElementById('closeEditModalBtn');
 if (closeEditModalBtn) {
     closeEditModalBtn.addEventListener('click', () => {
-        if (editFormElements.modal) editForments.modal.style.display = 'none';
+        // Corrected a typo here if it was present in a previous version, ensuring correct element access.
+        if (editFormElements.modal) editFormElements.modal.style.display = 'none'; 
     });
 }
 
