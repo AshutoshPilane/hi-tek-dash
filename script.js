@@ -40,9 +40,6 @@ const HI_TEK_TASKS_MAP = [
 /**
  * Fetches data from a specified sheet (GET request).
  */
-/**
- * Fetches data from a specified sheet (GET request).
- */
 const fetchDataFromSheet = async (sheetName) => {
     // FIX: Add a unique timestamp to the URL to prevent caching (cache-buster).
     const cacheBuster = new Date().getTime();
@@ -67,6 +64,10 @@ const fetchDataFromSheet = async (sheetName) => {
 
         // 3. Check for HTTP errors (4xx, 5xx)
         if (!response.ok) {
+            // We rely on the JSON body for error status since Apps Script can't set status code
+            if (data && data.status === 'error') {
+                 throw new Error(`Apps Script Error: ${data.message || 'Unknown script error'}`);
+            }
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
@@ -120,7 +121,7 @@ const sendDataToSheet = async (sheetName, method, payload) => {
         if (!response.ok || (result && result.status === 'error')) {
             console.error('API Response Error:', result);
             // Use the script's error message if available
-            throw new Error(`API Request Failed (${response.status}): ${result.message || 'Unknown error'}`);
+            throw new Error(`API Request Failed (${response.status || 'Script Error'}): ${result.message || 'Unknown error'}`);
         }
 
         return { status: 'success', message: result };
@@ -139,6 +140,8 @@ const serialDateToISO = (serial) => {
     const numSerial = Number(serial);
     if (typeof numSerial !== 'number' || numSerial < 1 || isNaN(numSerial)) return '';
     
+    // Note: Sheets uses a different epoch for dates before 1900, but 
+    // the standard epoch (1899-12-30) works for modern dates.
     const excelEpoch = new Date(Date.UTC(1899, 11, 30));
     const milliseconds = numSerial * 24 * 60 * 60 * 1000;
     const date = new Date(excelEpoch.getTime() + milliseconds);
@@ -179,7 +182,7 @@ const safeDate = (isoDate) => {
 const projectSelector = document.getElementById('projectSelector');
 const currentProjectNameElement = document.getElementById('currentProjectName');
 const projectDetailsDisplay = document.getElementById('projectDetailsDisplay'); 
-const projectDetailsEdit = document.getElementById('projectDetailsEdit');     
+const projectDetailsEdit = document.getElementById('projectDetailsEdit'); 
 
 const loadProjects = async () => {
     if (!projectSelector || !currentProjectNameElement) return; // Added safety check
@@ -197,10 +200,12 @@ const loadProjects = async () => {
     try {
         const projectsData = await fetchDataFromSheet('Projects');
         if (projectsData && projectsData.length > 0) {
+            // Filter to ensure we only process records with a ProjectID
             allProjects = projectsData.filter(p => p.ProjectID); 
 
             allProjects.forEach(project => {
                 const option = document.createElement('option');
+                // Use String().trim() for safety against stray spaces/types
                 option.value = String(project.ProjectID).trim(); 
                 option.textContent = `${project.Name} (${project.ProjectID})`;
                 projectSelector.appendChild(option);
@@ -252,6 +257,7 @@ const clearDashboard = () => {
 const handleProjectSelection = (projectID) => {
     currentProjectID = projectID;
     
+    // Switch to display mode
     if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
     if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
 
@@ -294,8 +300,19 @@ const updateDashboard = (project) => {
     const deadlineISO = deadlineRaw ? serialDateToISO(Number(deadlineRaw)) : '';
     
     // 1. Update Project Details
-    const displayName = document.getElementById('display-name');
-    if(displayName) displayName.textContent = project.Name || 'N/A';
+    const detailsMap = {
+        'display-name': project.Name,
+        'display-location': project.Location,
+        'display-contractor': project.Contractor,
+        'display-engineers': project.SiteEngineers,
+        'display-contact1': project.Contact1,
+        'display-contact2': project.Contact2
+    };
+
+    for (const [id, value] of Object.entries(detailsMap)) {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value || 'N/A';
+    }
 
     // Apply date formatting for display (DD-MM-YYYY)
     const displayStartDate = document.getElementById('display-start-date');
@@ -304,11 +321,14 @@ const updateDashboard = (project) => {
     const displayDeadline = document.getElementById('display-deadline');
     if(displayDeadline) displayDeadline.textContent = formatDisplayDate(deadlineRaw);
     
-    // (Other detail updates removed for brevity but are in the original logic)
-    
     // 2. Work Order KPI (Project Amount)
+    const amount = parseFloat(project.Amount) || 0;
     const kpiWorkOrder = document.getElementById('kpi-work-order');
-    if(kpiWorkOrder) kpiWorkOrder.textContent = `₹${(parseFloat(project.Amount) || 0).toLocaleString('en-IN')}`;
+    const displayAmount = document.getElementById('display-amount');
+
+    if(kpiWorkOrder) kpiWorkOrder.textContent = `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+    if(displayAmount) displayAmount.textContent = `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
 
     // 3. Time Calculations 
     const startDate = startDateISO ? safeDate(startDateISO) : null;
@@ -346,36 +366,39 @@ const updateDashboard = (project) => {
     }
 };
 
-// --- 5, 6, 7, 8: Task, Expense, Material Management (Same Logic) ---
-// (Logic for loadTasks, loadExpenses, loadMaterials, updateTaskForm, expenseEntryForm, recordDispatchForm goes here - UNCHANGED)
-// --- 5, 6, 7, 8: Task, Expense, Material Management (Same Logic) ---
 // --- 5, 6, 7, 8: Task, Expense, Material Management (Placeholder Stubs) ---
-// These functions are required to be defined for the handleProjectSelection to run.
 
 const loadTasks = (projectId) => {
     // console.log(`[STUB] Loading tasks for project ${projectId}`);
     const taskTableBody = document.getElementById('taskTableBody');
     if(taskTableBody) taskTableBody.innerHTML = '<tr><td colspan="5">Tasks not implemented yet.</td></tr>';
+    // KPI Reset
+    const kpiProgress = document.getElementById('kpi-progress');
+    if(kpiProgress) kpiProgress.textContent = '0%';
 };
 
 const loadExpenses = (projectId) => {
     // console.log(`[STUB] Loading expenses for project ${projectId}`);
     const recentExpensesList = document.getElementById('recentExpensesList');
     if(recentExpensesList) recentExpensesList.innerHTML = '<li class="placeholder">Expenses not implemented yet.</li>';
+     // KPI Reset
+    const kpiTotalExpenses = document.getElementById('kpi-total-expenses');
+    if(kpiTotalExpenses) kpiTotalExpenses.textContent = '₹ 0';
 };
 
 const loadMaterials = (projectId) => {
     // console.log(`[STUB] Loading materials for project ${projectId}`);
     const materialTableBody = document.getElementById('materialTableBody');
     if(materialTableBody) materialTableBody.innerHTML = '<tr><td colspan="5">Materials not implemented yet.</td></tr>';
+     // KPI Reset
+    const kpiMaterialProgress = document.getElementById('kpi-material-progress');
+    if(kpiMaterialProgress) kpiMaterialProgress.textContent = '0%';
 };
 
 const loadTasksForDropdown = (projectId) => {
     // console.log(`[STUB] Loading tasks for dropdowns for project ${projectId}`);
 };
 
-// --------------------------------------------------------------------------
-// ... (remaining unchanged logic)
 // --- 9. PROJECT ADD/DELETE ---
 
 const generateNewID = () => {
@@ -390,11 +413,42 @@ const generateNewID = () => {
     return `HT-${String(newNum).padStart(2, '0')}`; 
 };
 
-// FIX A: Use local proxy URL
+// Custom modal implementation instead of standard alert/confirm
+const showCustomModal = (title, message, isConfirm = false, onConfirm = () => {}) => {
+    const modal = document.createElement('div');
+    modal.className = 'custom-modal-overlay';
+    modal.innerHTML = `
+        <div class="custom-modal-content">
+            <h3>${title}</h3>
+            <p>${message}</p>
+            <div class="modal-actions">
+                ${isConfirm ? `<button class="button-secondary" id="modalCancel">Cancel</button>` : ''}
+                <button class="button-primary" id="modalConfirm">OK</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const confirmBtn = document.getElementById('modalConfirm');
+    const cancelBtn = document.getElementById('modalCancel');
+
+    confirmBtn.onclick = () => {
+        document.body.removeChild(modal);
+        if (isConfirm) onConfirm();
+    };
+
+    if (cancelBtn) {
+        cancelBtn.onclick = () => {
+            document.body.removeChild(modal);
+        };
+    }
+};
+
+// Project Add Button
 const addProjectBtn = document.getElementById('addProjectBtn');
 if (addProjectBtn) {
     addProjectBtn.addEventListener('click', async () => {
-        const newName = prompt('Enter the name for the new project:');
+        const newName = prompt('Enter the name for the new project:'); // Using prompt temporarily for simple input
         if (!newName || newName.trim() === '') return;
 
         const newID = generateNewID();
@@ -406,7 +460,12 @@ if (addProjectBtn) {
             StartDate: today,
             Deadline: '', 
             Amount: 0, 
-            CreationDate: today
+            CreationDate: today,
+            Location: '',
+            Contractor: '',
+            SiteEngineers: '',
+            Contact1: '',
+            Contact2: ''
         };
 
         const tasksPayload = HI_TEK_TASKS_MAP.map(task => ({
@@ -424,67 +483,128 @@ if (addProjectBtn) {
         ]);
         
         if (projectResult.status === 'success' && taskResult.status === 'success') {
-            alert(`Project "${newName}" added successfully with ID ${newID}. All 23 official tasks were loaded.`);
+            showCustomModal('Success', `Project "${newName}" added successfully with ID ${newID}. All 23 official tasks were loaded.`);
         } else {
-            alert(`Failed to add project. Project Status: ${projectResult.status}. Task Status: ${taskResult.status}. Check the console for details.`);
+            showCustomModal('Error', `Failed to add project. Project Status: ${projectResult.status}. Task Status: ${taskResult.status}. Check the console for details.`);
         }
         
         await loadProjects();
     });
 }
 
-// FIX C: Add safety check
+// Project Delete Button
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
 if (deleteProjectBtn) {
     deleteProjectBtn.addEventListener('click', async () => {
-        if (!currentProjectID) return alert('No project is selected.');
+        if (!currentProjectID) return showCustomModal('Warning', 'No project is selected.');
         const currentProject = allProjects.find(p => String(p.ProjectID).trim() === String(currentProjectID).trim());
         
-        if (!confirm(`WARNING: Are you sure you want to delete Project "${currentProject.Name}" (${currentProjectID})? This action will DELETE the project record and all associated data (Tasks, Expenses) from the Google Sheet.`)) {
-            return; 
-        }
+        const confirmDelete = () => {
+            const deletePayload = [{ ProjectID: currentProjectID }];
+
+            // Perform deletions in parallel
+            Promise.all([
+                sendDataToSheet('Projects', 'DELETE', deletePayload),
+                sendDataToSheet('Tasks', 'DELETE', deletePayload),
+                sendDataToSheet('Expenses', 'DELETE', deletePayload),
+                sendDataToSheet('Materials', 'DELETE', deletePayload)
+            ]).then(([projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult]) => {
+                if (projectDeleteResult.status === 'success') {
+                    showCustomModal('Success', `Project ${currentProjectID} deleted successfully, including all associated data!`);
+                    loadProjects(); 
+                } else {
+                    console.error('Delete results:', { projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult });
+                    showCustomModal('Error', `Failed to delete project. Please check the console for details. Primary Error: ${projectDeleteResult.message}`);
+                }
+            });
+        };
         
-        const deletePayload = [{ ProjectID: currentProjectID }];
-
-        const [projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult] = await Promise.all([
-            sendDataToSheet('Projects', 'DELETE', deletePayload),
-            sendDataToSheet('Tasks', 'DELETE', deletePayload),
-            sendDataToSheet('Expenses', 'DELETE', deletePayload),
-            sendDataToSheet('Materials', 'DELETE', deletePayload)
-        ]);
-
-
-        if (projectDeleteResult.status === 'success') {
-            alert(`Project ${currentProjectID} deleted successfully, including all associated data!`);
-            await loadProjects(); 
-        } else {
-            console.error('Delete results:', { projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult });
-            alert(`Failed to delete project. Please check the console for details. Primary Error: ${projectDeleteResult.message}`);
-        }
+        showCustomModal(
+            'WARNING', 
+            `Are you sure you want to delete Project "${currentProject.Name}" (${currentProjectID})? This action will DELETE the project record and all associated data (Tasks, Expenses) from the Google Sheet.`,
+            true, // isConfirm: true
+            confirmDelete // onConfirm function
+        );
     });
 }
 
 
 // --- 10. PROJECT EDIT LOGIC ---
 
+const populateEditForm = (project) => {
+    // Convert serial date to YYYY-MM-DD for the date input
+    const startDate = project.StartDate ? serialDateToISO(Number(project.StartDate)) : '';
+    const deadline = project.Deadline ? serialDateToISO(Number(project.Deadline)) : '';
+
+    document.getElementById('edit-name').value = project.Name || '';
+    document.getElementById('edit-start-date').value = startDate;
+    document.getElementById('edit-deadline').value = deadline;
+    document.getElementById('edit-amount').value = parseFloat(project.Amount) || 0;
+    document.getElementById('edit-location').value = project.Location || '';
+    document.getElementById('edit-contractor').value = project.Contractor || '';
+    document.getElementById('edit-engineers').value = project.SiteEngineers || '';
+    document.getElementById('edit-contact1').value = project.Contact1 || '';
+    document.getElementById('edit-contact2').value = project.Contact2 || '';
+}
+
 const editProjectDetailsBtn = document.getElementById('editProjectDetailsBtn');
 if (editProjectDetailsBtn) {
     editProjectDetailsBtn.addEventListener('click', () => {
-        // ... (existing logic for edit button)
+        if (!currentProjectID) return showCustomModal('Warning', 'No project is selected to edit.');
+        const selectedProject = allProjects.find(p => String(p.ProjectID).trim() === String(currentProjectID).trim());
+
+        if (selectedProject) {
+            populateEditForm(selectedProject);
+            if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'none';
+            if (projectDetailsEdit) projectDetailsEdit.style.display = 'block';
+        } else {
+            showCustomModal('Error', 'Selected project data could not be found.');
+        }
     });
 }
 
 const cancelEditBtn = document.getElementById('cancelEditBtn');
 if (cancelEditBtn) {
     cancelEditBtn.addEventListener('click', () => {
-        // ... (existing logic for cancel button)
+        if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
+        if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
     });
 }
 
 const projectEditForm = document.getElementById('projectEditForm');
 if (projectEditForm) {
     projectEditForm.addEventListener('submit', async (e) => {
-        // ... (existing logic for edit form submission)
+        e.preventDefault();
+
+        const updatedProject = {
+            ProjectID: currentProjectID, // CRITICAL: The ID is the key for the PUT operation
+            Name: document.getElementById('edit-name').value.trim(),
+            StartDate: document.getElementById('edit-start-date').value,
+            Deadline: document.getElementById('edit-deadline').value,
+            Amount: parseFloat(document.getElementById('edit-amount').value) || 0,
+            Location: document.getElementById('edit-location').value.trim(),
+            Contractor: document.getElementById('edit-contractor').value.trim(),
+            SiteEngineers: document.getElementById('edit-engineers').value.trim(),
+            Contact1: document.getElementById('edit-contact1').value.trim(),
+            Contact2: document.getElementById('edit-contact2').value.trim()
+            // Note: CreationDate is omitted as it should not be updated
+        };
+
+        const result = await sendDataToSheet('Projects', 'PUT', [updatedProject]);
+
+        if (result.status === 'success') {
+            showCustomModal('Success', `Project ${currentProjectID} updated successfully!`);
+            
+            // Reload projects to update all local data and the dashboard view
+            await loadProjects();
+            
+            // Switch back to display mode
+            if (projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
+            if (projectDetailsEdit) projectDetailsEdit.style.display = 'none';
+
+        } else {
+            showCustomModal('Error', `Failed to update project: ${result.message}`);
+        }
     });
 }
 
@@ -492,7 +612,3 @@ if (projectEditForm) {
 // --- 11. INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', loadProjects);
-
-
-
-
