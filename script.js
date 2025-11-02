@@ -50,7 +50,7 @@ const HI_TEK_TASKS_MAP = [
  * Sends data to the Google Sheets API proxy.
  * @param {string} sheetName - The name of the sheet to interact with (e.g., 'Projects', 'Tasks').
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST', 'PUT', 'DELETE').
- * @param {Object} data - The payload to send (for POST/PUT, this is the record; for POST_BATCH, this is {data: [...]}).
+ * @param {Object} data - The payload to send (for single POST/PUT/DELETE, this is the record object; for POST_BATCH, this is {data: [...]}).
  * @returns {Promise<Object>} The JSON response from the API.
  */
 async function sendDataToSheet(sheetName, method, data = {}) {
@@ -58,12 +58,12 @@ async function sendDataToSheet(sheetName, method, data = {}) {
 
     // Structure the payload based on the method type
     if (['POST', 'PUT', 'DELETE'].includes(method)) {
-        // For single-record operations, wrap the data in a 'record' key.
-        // This prevents the record properties from mixing with sheetName/method.
-        payload.record = data;
+        // FIX: Use a dedicated 'data' key for single-record operations (more robust)
+        payload.data = data;
     } else if (method.includes('BATCH')) {
-        // For batch operations (like POST_BATCH), assume the data object already contains
-        // the required keys (e.g., { data: [...] }) and spread it.
+        // For batch operations (like POST_BATCH), the 'data' object already contains 
+        // the array under a 'data' key, so we spread it.
+        // Example: data = { data: [task1, task2] }
         payload = { ...payload, ...data };
     } else {
         // For GET operations (where 'data' contains query params like ProjectID), spread it
@@ -449,8 +449,12 @@ if (projectForm) {
             await loadProjects();
             showMessageBox(`Project ${projectData.ProjectName} created successfully with ${initialTasks.length} initial tasks!`, 'success');
         } else {
+            // Error handling needs to show the messages clearly
+            const projectErrorMessage = projectResult.message || 'Unknown Project Error';
+            const tasksErrorMessage = tasksResult.message || 'Unknown Task Batch Error';
+            
             console.error("Project/Task Creation Error:", { projectResult, tasksResult });
-            showMessageBox(`Failed to create project. Check console for details. Project Error: ${projectResult.message}`, 'error');
+            showMessageBox(`Failed to create project. Project Error: ${projectErrorMessage}. Task Error: ${tasksErrorMessage}. Check console for details.`, 'error');
         }
     });
 }
@@ -515,12 +519,12 @@ if (deleteProjectBtn) {
         const deletePayload = { ProjectID: currentProjectID };
 
         // Deleting related data first, then the project record itself
-        const [projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult] = await Promise.all([
+        const [projectDeleteResult, tasksDeleteResult, expensesDeleteResult] = await Promise.all([
             sendDataToSheet('Projects', 'DELETE', deletePayload),
             sendDataToSheet('Tasks', 'DELETE', deletePayload),
             sendDataToSheet('Expenses', 'DELETE', deletePayload),
             // Assuming there's a Materials sheet/endpoint
-            // sendDataToSheet('Materials', 'DELETE', deletePayload)
+            // sendDataToSheet('Materials', 'DELETE', deletePayload) // Commented out as Materials sheet is not confirmed
         ]);
 
 
@@ -528,7 +532,7 @@ if (deleteProjectBtn) {
             showMessageBox(`Project ${currentProjectID} deleted successfully, including all associated data!`, 'success');
             await loadProjects(); 
         } else {
-            console.error('Delete results:', { projectDeleteResult, tasksDeleteResult, expensesDeleteResult, materialsDeleteResult });
+            console.error('Delete results:', { projectDeleteResult, tasksDeleteResult, expensesDeleteResult });
             showMessageBox(`Failed to delete project. Please check the console for details. Primary Error: ${projectDeleteResult.message}`, 'error');
         }
     });
