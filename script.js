@@ -423,7 +423,7 @@ if (taskUpdateForm) {
         };
         
         // SheetDB PUT (Update) the row where ProjectID and TaskName match
-        const url = `${SHEET_API_URL}/ProjectID/${currentProjectID}/TaskName/${selectedTaskName}?sheet=Tasks`;
+        const url = `${SHEET_API_URL}?sheet=Tasks&ProjectID=${currentProjectID}&TaskName=${encodeURIComponent(selectedTaskName)}`;
         
         try {
             const response = await fetch(url, {
@@ -617,7 +617,7 @@ document.getElementById('recordDispatchForm').addEventListener('submit', async (
     if (materialItemId) {
         // SCENARIO 1: UPDATE EXISTING MATERIAL (PUT)
         method = 'PUT';
-        url = `${SHEET_API_URL}/ItemID/${materialItemId}?sheet=Materials`;
+        url = `${SHEET_API_URL}?sheet=Materials&ItemID=${materialItemId}`;
         payload = { 
             // FIX: Convert numbers to strings for reliable SheetDB update
             Dispatched_Qty: String(dispatchQuantity), 
@@ -737,11 +737,11 @@ document.getElementById('deleteProjectBtn').addEventListener('click', async () =
     }
     
     const deleteUrls = [
-        `${SHEET_API_URL}/ProjectID/${currentProjectID}?sheet=Projects`,
-        `${SHEET_API_URL}/ProjectID/${currentProjectID}?sheet=Tasks`,
-        `${SHEET_API_URL}/ProjectID/${currentProjectID}?sheet=Expenses`,
-        `${SHEET_API_URL}/ProjectID/${currentProjectID}?sheet=Materials`
-    ];
+    `${SHEET_API_URL}?sheet=Projects&ProjectID=${currentProjectID}`,
+    `${SHEET_API_URL}?sheet=Tasks&ProjectID=${currentProjectID}`,
+    `${SHEET_API_URL}?sheet=Expenses&ProjectID=${currentProjectID}`,
+    `${SHEET_API_URL}?sheet=Materials&ProjectID=${currentProjectID}`
+];
 
     const results = await Promise.all(deleteUrls.map(url => fetch(url, { method: 'DELETE' })));
     const jsonResults = await Promise.all(results.map(res => {
@@ -845,4 +845,5 @@ document.getElementById('saveProjectDetailsBtn').addEventListener('click', async
 // --- 11. INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', loadProjects);
+
 
