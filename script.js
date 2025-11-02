@@ -50,7 +50,7 @@ const HI_TEK_TASKS_MAP = [
  * Sends data to the Google Sheets API proxy.
  * @param {string} sheetName - The name of the sheet to interact with (e.g., 'Projects', 'Tasks').
  * @param {string} method - The HTTP method to use (e.g., 'GET', 'POST', 'PUT', 'DELETE').
- * @param {Object} data - The payload to send (for single POST/PUT/DELETE, this is the record object; for POST_BATCH, this is {data: [...]}).
+ * @param {Object|Array} data - The payload to send (object for single POST/PUT/DELETE, array for POST_BATCH).
  * @returns {Promise<Object>} The JSON response from the API.
  */
 async function sendDataToSheet(sheetName, method, data = {}) {
@@ -58,13 +58,13 @@ async function sendDataToSheet(sheetName, method, data = {}) {
 
     // Structure the payload based on the method type
     if (['POST', 'PUT', 'DELETE'].includes(method)) {
-        // FIX: Use a dedicated 'data' key for single-record operations (more robust)
+        // Single record operation (Project creation, Task update, Expense creation, single record deletion)
+        // Uses 'data' key for single object.
         payload.data = data;
     } else if (method.includes('BATCH')) {
-        // For batch operations (like POST_BATCH), the 'data' object already contains 
-        // the array under a 'data' key, so we spread it.
-        // Example: data = { data: [task1, task2] }
-        payload = { ...payload, ...data };
+        // Batch operation (Initial tasks creation)
+        // CRITICAL FIX: Expects 'data' to be the array of records. Uses 'records' key for array submission.
+        payload.records = data; 
     } else {
         // For GET operations (where 'data' contains query params like ProjectID), spread it
         payload = { ...payload, ...data };
@@ -437,10 +437,11 @@ if (projectForm) {
             Completed: 'No'
         }));
 
-        // Send Project data and then Initial Tasks concurrently
+        // Send Project data (single POST) and then Initial Tasks (POST_BATCH) concurrently
         const [projectResult, tasksResult] = await Promise.all([
             sendDataToSheet('Projects', 'POST', projectData),
-            sendDataToSheet('Tasks', 'POST_BATCH', { data: initialTasks })
+            // FIX: Pass the array of tasks directly for POST_BATCH
+            sendDataToSheet('Tasks', 'POST_BATCH', initialTasks) 
         ]);
 
         if (projectResult.status === 'success' && tasksResult.status === 'success') {
@@ -605,7 +606,7 @@ if (cancelEditBtn) {
 const closeEditModalBtn = document.getElementById('closeEditModalBtn');
 if (closeEditModalBtn) {
     closeEditModalBtn.addEventListener('click', () => {
-        if (editFormElements.modal) editFormElements.modal.style.display = 'none';
+        if (editFormElements.modal) editForments.modal.style.display = 'none';
     });
 }
 
