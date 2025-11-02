@@ -10,181 +10,70 @@
 
     <header>
         <h1>Hi Tek Project Dashboard: <span id="currentProjectName">Select a Project</span></h1>
-        <div style="display: flex; gap: 10px; align-items: center;">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
             <label for="projectSelector" style="font-weight: bold;">Current Project:</label>
             <select id="projectSelector"></select>
+            <button id="editProjectDetailsBtn" class="button-secondary">✏️ Edit Details</button>
             <button id="addProjectBtn" class="button-primary">➕ New Project</button>
             <button id="deleteProjectBtn" class="button-secondary">🗑️ Delete Project</button>
-            <button id="editProjectDetailsBtn" class="button-secondary">✏️ Edit Details</button>
         </div>
     </header>
 
-    <!-- Project Edit Modal (The missing piece causing the error) -->
-    <div id="projectEditModal" class="modal">
-        <div class="modal-content">
-            <span class="close-button" id="closeEditModalBtn">&times;</span>
-            <h2>Edit Project Details</h2>
-            <form id="projectEditForm">
-                <!-- CRITICAL: Hidden field to hold the ProjectID -->
-                <input type="hidden" id="editProjectID" name="ProjectID"> 
-
-                <div class="form-group">
-                    <label for="editProjectName">Project Name:</label>
-                    <input type="text" id="editProjectName" name="ProjectName" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="editClientName">Client Name:</label>
-                    <input type="text" id="editClientName" name="ClientName" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="editProjectLocation">Location/City:</label>
-                    <input type="text" id="editProjectLocation" name="ProjectLocation" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="editProjectStartDate">Start Date:</label>
-                    <input type="date" id="editProjectStartDate" name="ProjectStartDate" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="editProjectDeadline">Deadline:</label>
-                    <input type="date" id="editProjectDeadline" name="ProjectDeadline" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="editProjectValue">Project Value (INR):</label>
-                    <input type="number" id="editProjectValue" name="ProjectValue" min="0" step="0.01" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="editProjectType">Project Type:</label>
-                    <select id="editProjectType" name="ProjectType" required>
-                        <option value="Residential">Residential</option>
-                        <option value="Commercial">Commercial</option>
-                        <option value="Industrial">Industrial</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-
-                <div class="form-actions">
-                    <button type="submit" class="button-primary">Save Changes</button>
-                    <button type="button" id="cancelEditBtn" class="button-secondary">Cancel</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-
-    <!-- Project Creation Modal -->
-    <div id="projectModal" class="modal">
-        <div class="modal-content">
-            <span class="close-button" id="closeModalBtn">&times;</span>
-            <h2>Create New Project</h2>
-            <form id="projectForm">
-                <div class="form-group">
-                    <label for="projectName">Project Name:</label>
-                    <input type="text" id="projectName" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="clientName">Client Name:</label>
-                    <input type="text" id="clientName" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="projectLocation">Location/City:</label>
-                    <input type="text" id="projectLocation" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="projectStartDate">Start Date:</label>
-                    <input type="date" id="projectStartDate" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="projectDeadline">Deadline:</label>
-                    <input type="date" id="projectDeadline" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="projectValue">Project Value (INR):</label>
-                    <input type="number" id="projectValue" min="0" step="0.01" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="projectType">Project Type:</label>
-                    <select id="projectType" required>
-                        <option value="Residential">Residential</option>
-                        <option value="Commercial">Commercial</option>
-                        <option value="Industrial">Industrial</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
-
-                <button type="submit" class="button-primary">Create Project</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Main Dashboard Content -->
-    <div class="dashboard-grid">
-
-        <!-- Column 1: KPIs & Tasks -->
-        <div class="panel">
-            <h2>Key Performance Indicators (KPIs)</h2>
-            <div class="kpi-container">
-                <div class="kpi-box">
-                    <div class="label">Days Spent</div>
-                    <div class="value" id="kpi-days-spent">N/A</div>
-                </div>
-                <div class="kpi-box">
-                    <div class="label">Days Remaining (Deadline)</div>
-                    <div class="value" id="kpi-days-left">N/A</div>
-                </div>
-                <div class="kpi-box kpi-full-width">
-                    <div class="label">Total Tasks Complete / Total Tasks</div>
-                    <div class="value" id="kpi-task-completion">N/A</div>
-                </div>
-                <div class="kpi-box">
-                    <div class="label">Total Project Value</div>
-                    <div class="value" id="kpi-project-value">N/A</div>
-                </div>
-                <div class="kpi-box">
-                    <div class="label">Total Expenses</div>
-                    <div class="value" id="kpi-total-expenses">N/A</div>
-                </div>
-                <div class="kpi-box kpi-full-width">
-                    <div class="label">Net Margin Remaining (Value - Expenses)</div>
-                    <div class="value" id="kpi-net-margin">N/A</div>
-                </div>
+    <div class="panel" style="margin-bottom: 20px;">
+        <h2>Key Performance Indicators (KPIs)</h2>
+        <div class="kpi-container">
+            <div class="kpi-box">
+                <div class="label">Days Spent</div>
+                <div class="value" id="kpi-days-spent">N/A</div>
             </div>
-
-            <hr>
-
-            <h2>Project Status and Tasks</h2>
-            <ul id="taskList">
-                <li class="placeholder">Select a project to view tasks...</li>
-            </ul>
-
+            <div class="kpi-box">
+                <div class="label">Days Remaining (Deadline)</div>
+                <div class="value" id="kpi-days-left">N/A</div>
+            </div>
+            <div class="kpi-box">
+                <div class="label">Task Completion</div>
+                <div class="value" id="kpi-task-completion">N/A</div>
+            </div>
+            <div class="kpi-box kpi-full-width">
+                <div class="label">Project Value</div>
+                <div class="value" id="kpi-project-value">N/A</div>
+            </div>
+            <div class="kpi-box">
+                <div class="label">Total Expenses</div>
+                <div class="value" id="kpi-total-expenses">N/A</div>
+            </div>
+            <div class="kpi-box">
+                <div class="label">Net Margin</div>
+                <div class="value" id="kpi-net-margin">N/A</div>
+            </div>
         </div>
+    </div>
 
-        <!-- Column 2: Details, Expenses, Materials -->
+    <div class="dashboard-grid">
+        
+        <!-- PROJECT DETAILS PANEL -->
         <div class="panel">
             <h2>Project Details</h2>
             <div id="projectDetailDisplay">
-                <p><strong>Client:</strong> <span id="detailClientName">N/A</span></p>
+                <p><strong>Client Name:</strong> <span id="detailClientName">N/A</span></p>
                 <p><strong>Location:</strong> <span id="detailProjectLocation">N/A</span></p>
                 <p><strong>Start Date:</strong> <span id="detailProjectStartDate">N/A</span></p>
                 <p><strong>Deadline:</strong> <span id="detailProjectDeadline">N/A</span></p>
-                <p><strong>Value:</strong> <span id="detailProjectValue">N/A</span></p>
-                <p><strong>Type:</strong> <span id="detailProjectType">N/A</span></p>
+                <p><strong>Project Value:</strong> <span id="detailProjectValue">N/A</span></p>
+                <p><strong>Project Type:</strong> <span id="detailProjectType">N/A</span></p>
             </div>
+        </div>
 
-            <hr>
+        <!-- TASK LIST PANEL -->
+        <div class="panel">
+            <h2>Task Workflow (23 Steps)</h2>
+            <ul id="taskList">
+                <li class="placeholder">Select a project to view tasks...</li>
+            </ul>
+        </div>
 
-            <!-- Expenses Section -->
+        <!-- EXPENSES PANEL -->
+        <div class="panel">
             <div class="form-section">
                 <h3>Record New Expense</h3>
                 <form id="expenseEntryForm">
@@ -214,9 +103,91 @@
             <ul id="recentExpensesList">
                 <li class="placeholder">No expenses loaded...</li>
             </ul>
-
         </div>
 
+    </div>
+
+    <!-- ============================================= -->
+    <!-- 1. NEW PROJECT MODAL (Required by script.js) -->
+    <!-- ============================================= -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="closeModalBtn">&times;</span>
+            <h2>Create New Project</h2>
+            <form id="projectForm">
+                <label for="projectName">Project Name:</label>
+                <input type="text" id="projectName" required>
+
+                <label for="clientName">Client Name:</label>
+                <input type="text" id="clientName" required>
+
+                <label for="projectLocation">Location:</label>
+                <input type="text" id="projectLocation" required>
+
+                <label for="projectStartDate">Start Date:</label>
+                <input type="date" id="projectStartDate" required>
+
+                <label for="projectDeadline">Deadline:</label>
+                <input type="date" id="projectDeadline" required>
+
+                <label for="projectValue">Project Value (INR):</label>
+                <input type="number" id="projectValue" min="0" required>
+                
+                <label for="projectType">Project Type:</label>
+                <select id="projectType" required>
+                    <option value="Residential">Residential</option>
+                    <option value="Commercial">Commercial</option>
+                    <option value="Infrastructure">Infrastructure</option>
+                    <option value="Maintenance">Maintenance</option>
+                </select>
+
+                <button type="submit" class="button-primary">Create Project & Tasks</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ============================================= -->
+    <!-- 2. PROJECT EDIT MODAL (Required by script.js) -->
+    <!-- ============================================= -->
+    <div id="projectEditModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="closeEditModalBtn">&times;</span>
+            <h2>Edit Project Details</h2>
+            <form id="projectEditForm">
+                <input type="hidden" id="editProjectID">
+
+                <label for="editProjectName">Project Name:</label>
+                <input type="text" id="editProjectName" required>
+
+                <label for="editClientName">Client Name:</label>
+                <input type="text" id="editClientName" required>
+
+                <label for="editProjectLocation">Location:</label>
+                <input type="text" id="editProjectLocation" required>
+
+                <label for="editProjectStartDate">Start Date:</label>
+                <input type="date" id="editProjectStartDate" required>
+
+                <label for="editProjectDeadline">Deadline:</label>
+                <input type="date" id="editProjectDeadline" required>
+
+                <label for="editProjectValue">Project Value (INR):</label>
+                <input type="number" id="editProjectValue" min="0" required>
+                
+                <label for="editProjectType">Project Type:</label>
+                <select id="editProjectType" required>
+                    <option value="Residential">Residential</option>
+                    <option value="Commercial">Commercial</option>
+                    <option value="Infrastructure">Infrastructure</option>
+                    <option value="Maintenance">Maintenance</option>
+                </select>
+
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" class="button-primary" style="flex-grow: 1;">Save Changes</button>
+                    <button type="button" id="cancelEditBtn" class="button-secondary" style="flex-grow: 1;">Cancel</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script src="script.js"></script>
