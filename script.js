@@ -1,9 +1,9 @@
 // ==============================================================================
-// script.js: FINAL VERSION (SheetDB API Integration with all fixes)
+// script.js: FINAL VERSION (Vercel Redirect Fix)
 // ==============================================================================
 
-// 🎯 CRITICAL: PASTE YOUR WORKING SHEETDB API URL HERE!
-const SHEET_API_URL = "https://sheetdb.io/api/v1/3uaqqfnplzz5m"; 
+// 🎯 CRITICAL: This is the relative path that Vercel will redirect to your Apps Script URL.
+const SHEET_API_URL = "/api"; 
 
 let currentProjectID = null; 
 let allProjects = [];
@@ -845,3 +845,4 @@ document.getElementById('saveProjectDetailsBtn').addEventListener('click', async
 // --- 11. INITIALIZATION ---
 
 document.addEventListener('DOMContentLoaded', loadProjects);
+
