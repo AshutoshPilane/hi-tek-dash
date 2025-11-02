@@ -1,8 +1,12 @@
 {
-    "rewrites": [
-      {
-        "source": "/api/:match*",
-        "destination": "https://script.google.com/macros/s/AKfycbzxcMcx2Fm7ZW8lWX_1hxYemFP8n35XPbEIswQUm-V2xH4AraXGcdB2TH077BU4aIHVNA/exec"
-      }
-    ]
+  "rewrites": [
+    {
+      "source": "/api",
+      "destination": "https://script.google.com/macros/s/AKfycbzxcMcx2Fm7ZW8lWX_1hxYemFP8n35XPbEIswQUm-V2xH4AraXGcdB2TH077BU4aIHVNA/exec"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "https://script.google.com/macros/s/AKfycbzxcMcx2Fm7ZW8lWX_1hxYemFP8n35XPbEIswQUm-V2xH4AraXGcdB2TH077BU4aIHVNA/exec?sheet=:match"
+    }
+  ]
 }
