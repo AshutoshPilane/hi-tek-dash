@@ -1,11 +1,11 @@
 // =============================================================================
-// script.js: FINAL ROBUST VERSION (Guaranteed ProjectID for PUT/DELETE)
+// script.js: FINAL ROBUST VERSION (Apps Script Payload Fix)
 // =============================================================================
 
 const SHEET_API_URL = "/api"; 
 let currentProjectID = null; 
 let allProjects = [];
-let editingProjectID = null; // New variable to safely hold the ID during editing
+let editingProjectID = null; // Variable to safely hold the ID during editing
 
 // --- 1. UTILITY FUNCTIONS ---
 
@@ -14,17 +14,16 @@ function showMessageBox(message, type) {
 }
 
 async function sendDataToSheet(sheetName, method, data = {}) {
-    let payload = { sheetName, method };
+    let payload = { 
+        sheetName: sheetName, 
+        method: method 
+    };
 
-    // NOTE: Based on your Apps Script, the API expects data at the top level, 
-    // but your previous client code nested it. We will use the client structure
-    // that produces the correct ProjectID for the PUT request. 
-    // If your Apps Script expects the ProjectID at the top level (not nested), 
-    // please revert the payload construction to: payload = { sheetName, method, ...data };
-    
-    // Using the previously working nested structure for PUT/POST/DELETE:
+    // 🎯 CRITICAL FIX: Flatten the data payload for PUT/POST/DELETE
+    // The Apps Script is typically configured to expect fields like ProjectID 
+    // at the top level of the JSON object, not nested under a 'data' key.
     if (['POST', 'PUT', 'DELETE'].includes(method) || method.includes('BATCH')) {
-        payload.data = data; 
+        payload = { ...payload, ...data }; // Combines sheetName, method, and all data fields
     } else {
         payload = { ...payload, ...data };
     }
@@ -271,7 +270,7 @@ function loadEditForm(project) {
         if (el) el.value = value;
     };
 
-    // CRITICAL: Ensure the ProjectID value from the data is loaded into the hidden input.
+    // Use the explicit element IDs from the final index.html
     setInputValue('editProjectID', project.ProjectID || currentProjectID || ''); 
     
     setInputValue('editProjectName', project.ProjectName || project.Name || '');
@@ -281,10 +280,16 @@ function loadEditForm(project) {
     setInputValue('editProjectDeadline', project.ProjectDeadline || '');
     setInputValue('editProjectValue', parseFloat(project.ProjectValue || 0));
     setInputValue('editProjectType', project.ProjectType || '');
+    
+    // 🎯 Use the new IDs that match the updated index.html
+    setInputValue('editContractor', project.Contractor || '');
+    setInputValue('editEngineers', project.Engineers || '');
+    setInputValue('editContact1', project.Contact1 || '');
+    setInputValue('editContact2', project.Contact2 || '');
 }
 
 
-// --- EDIT BUTTON: TOGGLE DISPLAY (CRITICAL FIX APPLIED HERE) ---
+// --- EDIT BUTTON: TOGGLE DISPLAY (ID ISOLATION) ---
 if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     editProjectDetailsBtn.addEventListener('click', () => {
         if (!currentProjectID) {
@@ -299,7 +304,6 @@ if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
 
         loadEditForm(project);
         
-        // 🎯 DEBUG LOG 1: Check what was set to the hidden input
         console.log("DEBUG 1 (Edit Click): ID set to hidden input: " + document.getElementById('editProjectID').value);
         
         projectDetailsDisplay.style.display = 'none';
@@ -307,7 +311,7 @@ if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     });
 }
 
-// --- CANCEL BUTTON: TOGGLE BACK TO VIEW MODE (CRITICAL FIX APPLIED HERE) ---
+// --- CANCEL BUTTON: TOGGLE BACK TO VIEW MODE ---
 if (cancelEditBtn && projectDetailsDisplay && projectDetailsEdit) {
     cancelEditBtn.addEventListener('click', () => {
         projectDetailsDisplay.style.display = 'block';
@@ -322,14 +326,13 @@ if (cancelEditBtn && projectDetailsDisplay && projectDetailsEdit) {
 }
 
 
-// --- SAVE BUTTON: IMPLEMENT PUT LOGIC (CRITICAL FIX APPLIED HERE) ---
+// --- SAVE BUTTON: IMPLEMENT PUT LOGIC (USE ISOLATED ID) ---
 if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     saveProjectDetailsBtn.addEventListener('click', async () => {
         
-        // 🎯 CRITICAL FIX 2: Use the isolated editingProjectID, NOT the form value
+        // 🎯 CRITICAL FIX 2: Use the isolated editingProjectID
         const projectIDToSave = editingProjectID;
         
-        // 🎯 DEBUG LOG 2: Check what will be sent to the server (Now guaranteed correct)
         console.log("DEBUG 2 (Save Click): ID being sent to PUT: " + projectIDToSave);
 
         // Define a function for cleanup to avoid repetition
@@ -355,6 +358,12 @@ if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
             ProjectDeadline: document.getElementById('editProjectDeadline').value,
             ProjectValue: parseFloat(document.getElementById('editProjectValue').value) || 0,
             ProjectType: document.getElementById('editProjectType').value,
+            
+            // 🎯 Use the new IDs that match the updated index.html
+            Contractor: document.getElementById('editContractor').value,
+            Engineers: document.getElementById('editEngineers').value,
+            Contact1: document.getElementById('editContact1').value,
+            Contact2: document.getElementById('editContact2').value,
         };
         
         const result = await sendDataToSheet('Projects', 'PUT', updatedData);
@@ -362,6 +371,13 @@ if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
         if (result.status === 'success') {
             cleanup();
             await loadProjects(); 
+            // Select the newly updated project
+            if (projectSelector) projectSelector.value = projectIDToSave;
+            
+            // Wait for dashboard update to finish
+            const updatedProject = allProjects.find(p => p.ProjectID === projectIDToSave);
+            await updateDashboard(updatedProject); 
+
             showMessageBox(`Project ${updatedData.ProjectName} updated successfully!`, 'success');
         } else {
             cleanup(); // Ensure cleanup happens even on failure
