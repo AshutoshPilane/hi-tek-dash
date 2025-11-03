@@ -4,283 +4,364 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hi Tek Project Dashboard</title>
-    <link rel="stylesheet" href="style.css">
+    <!-- Tailwind CSS CDN for modern, responsive styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font and basic styling */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f4f7fa;
+            padding-top: 80px; /* Space for fixed header */
+        }
+        .panel {
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+        }
+        /* Custom scrollbar to remove horizontal scroll on mobile */
+        body, html {
+            overflow-x: hidden;
+        }
+    </style>
 </head>
 <body>
 
-    <header>
-        <h1>Hi Tek Project Dashboard: <span id="currentProjectName">Select a Project</span></h1>
-        <div style="display: flex; gap: 10px; align-items: center;">
-            <label for="projectSelector" style="font-weight: bold;">Current Project:</label>
-            <select id="projectSelector"></select>
-            <button id="addProjectBtn" class="button-primary">➕ New Project</button>
-            <button id="deleteProjectBtn" class="button-secondary">🗑️ Delete Project</button>
+    <!-- Global Message Box (for errors/success) -->
+    <div id="messageBox" class="hidden fixed top-20 right-4 p-4 rounded-lg text-white font-semibold shadow-xl z-50 transition duration-300">
+        <span id="messageText"></span>
+    </div>
+
+    <!-- Header & Navigation -->
+    <header class="bg-gray-800 text-white p-4 shadow-2xl flex flex-col sm:flex-row justify-between items-center fixed top-0 left-0 right-0 z-10">
+        <div class="mb-2 sm:mb-0">
+            <h1 class="text-xl sm:text-2xl font-extrabold">
+                Hi Tek Project Dashboard: 
+                <span id="currentProjectName" class="text-indigo-400">Select a Project</span>
+            </h1>
+            <p id="userIdDisplay" class="text-xs text-gray-400 mt-1"></p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 items-center w-full sm:w-auto">
+            <label for="projectSelector" class="font-semibold text-sm sm:text-base whitespace-nowrap">Current Project:</label>
+            <select id="projectSelector" class="p-2 border border-gray-600 rounded-lg bg-gray-700 text-white focus:ring-indigo-500 focus:border-indigo-500"></select>
+            <button id="addProjectBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out w-full sm:w-auto">➕ New Project</button>
+            <button id="deleteProjectBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out w-full sm:w-auto">🗑️ Delete Project</button>
         </div>
     </header>
 
-    <div class="panel" style="margin-bottom: 20px;">
-        <h2>Key Performance Indicators (KPIs)</h2>
-        <div class="kpi-container">
-            <div class="kpi-box">
-                <div class="label">Days Spent</div>
-                <div class="value" id="kpi-days-spent">N/A</div>
+    <main class="container mx-auto p-4">
+        <!-- Key Performance Indicators (KPIs) -->
+        <section class="panel">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Key Performance Indicators (KPIs)</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="kpi-box text-center bg-indigo-50 p-4 rounded-lg border-b-4 border-indigo-500 shadow-md">
+                    <div class="text-sm font-medium text-gray-500">Days Spent</div>
+                    <div class="text-3xl font-bold text-indigo-800 mt-1" id="kpi-days-spent">N/A</div>
+                </div>
+                <div class="kpi-box text-center bg-green-50 p-4 rounded-lg border-b-4 border-green-500 shadow-md">
+                    <div class="text-sm font-medium text-gray-500">Days Remaining (Deadline)</div>
+                    <div class="text-3xl font-bold text-green-800 mt-1" id="kpi-days-left">N/A</div>
+                </div>
+                <div class="kpi-box text-center bg-yellow-50 p-4 rounded-lg border-b-4 border-yellow-500 shadow-md">
+                    <div class="text-sm font-medium text-gray-500">Budget Spent ($)</div>
+                    <div class="text-3xl font-bold text-yellow-800 mt-1" id="kpi-budget-spent">N/A</div>
+                </div>
+                <div class="kpi-box text-center bg-red-50 p-4 rounded-lg border-b-4 border-red-500 shadow-md">
+                    <div class="text-sm font-medium text-gray-500">Budget Variance ($)</div>
+                    <div class="text-3xl font-bold text-red-800 mt-1" id="kpi-budget-variance">N/A</div>
+                </div>
             </div>
-            <div class="kpi-box">
-                <div class="label">Days Remaining (Deadline)</div>
-                <div class="value" id="kpi-days-left">N/A</div>
+        </section>
+        
+        <!-- Project Information -->
+        <section class="panel">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">Project Information</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-600">
+                <div class="flex justify-between border-b py-2">
+                    <span class="font-medium">Client Name:</span>
+                    <span id="info-client-name">N/A</span>
+                </div>
+                <div class="flex justify-between border-b py-2">
+                    <span class="font-medium">Project Value:</span>
+                    <span id="info-project-value">N/A</span>
+                </div>
+                <div class="flex justify-between border-b py-2">
+                    <span class="font-medium">Location:</span>
+                    <span id="info-location">N/A</span>
+                </div>
+                <div class="flex justify-between border-b py-2">
+                    <span class="font-medium">Start Date:</span>
+                    <span id="info-start-date">N/A</span>
+                </div>
+                <div class="flex justify-between border-b py-2">
+                    <span class="font-medium">Deadline:</span>
+                    <span id="info-deadline">N/A</span>
+                </div>
+                <div class="flex justify-between border-b py-2">
+                    <span class="font-medium">Project Type:</span>
+                    <span id="info-project-type">N/A</span>
+                </div>
+                <div class="flex justify-between border-b py-2">
+                    <span class="font-medium">Status:</span>
+                    <span id="info-status" class="font-bold text-blue-500">N/A</span>
+                </div>
             </div>
-            <div class="kpi-box">
-                <div class="label">Project Progress (Tasks)</div>
-                <div class="value" id="kpi-progress">0%</div>
-            </div>
-            <div class="kpi-box">
-                <div class="label">Material Progress (Dispatched)</div>
-                <div class="value" id="kpi-material-progress">0% Dispatched</div>
-            </div>
-            <div class="kpi-box kpi-full-width">
-                <div class="label">Work Order Amount</div>
-                <div class="value" id="kpi-work-order">₹ 0</div>
-            </div>
-            <div class="kpi-box kpi-full-width">
-                <div class="label">Total Expenses Recorded</div>
-                <div class="value" id="kpi-total-expenses">₹ 0</div>
-            </div>
+        </section>
+
+        <!-- Placeholder Sections (to be filled later) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <section class="panel">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Task Management</h2>
+                <p class="text-gray-500">Task list and completion data will appear here.</p>
+            </section>
+            <section class="panel">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">Material & Expense Tracking</h2>
+                <p class="text-gray-500">Material orders and financial expenses will be logged here.</p>
+            </section>
         </div>
-    </div>
+    </main>
 
-    <div class="dashboard-grid">
-
-        <div class="panel">
-            <h2>Project Details</h2>
-            
-            <div id="projectDetailsDisplay">
-                <ul class="detail-list">
-                    <li><strong>Name:</strong> <span id="display-name">N/A</span></li>
-                    <li><strong>Start Date:</strong> <span id="display-start-date">N/A</span></li>
-                    <li><strong>Deadline:</strong> <span id="display-deadline">N/A</span></li>
-                    <li><strong>Location:</strong> <span id="display-location">N/A</span></li>
-                    <li><strong>Amount:</strong> <span id="display-amount">N/A</span></li>
-                    <li><strong>Contractor:</strong> <span id="display-contractor">N/A</span></li>
-                    <li><strong>Engineers:</strong> <span id="display-engineers">N/A</span></li>
-                    <li><strong>Contact 1:</strong> <span id="display-contact1">N/A</span></li>
-                    <li><strong>Contact 2:</strong> <span id="display-contact2">N/A</span></li>
-                </ul>
-                <button id="editProjectDetailsBtn" class="button-secondary" style="margin-top: 15px;">Edit Details</button>
-            </div>
-            
-            <div id="projectDetailsEdit" style="display: none;">
-                <form id="projectEditForm">
-                    <input type="hidden" id="editProjectID" readonly> 
-
-                    <label for="editProjectName">Name:</label>
-                    <input type="text" id="editProjectName">
-                    
-                    <label for="editClientName">Client Name:</label>
-                    <input type="text" id="editClientName"> 
-
-                    <label for="editProjectStartDate">Start Date:</label>
-                    <input type="date" id="editProjectStartDate">
-                    
-                    <label for="editProjectDeadline">Deadline:</label>
-                    <input type="date" id="editProjectDeadline">
-                    
-                    <label for="editProjectLocation">Location:</label>
-                    <input type="text" id="editProjectLocation">
-                    
-                    <label for="editProjectValue">Amount (INR):</label>
-                    <input type="number" id="editProjectValue" min="0">
-                    
-                    <label for="editProjectType">Project Type:</label>
-                    <select id="editProjectType">
-                        <option value="Residential">Residential</option>
-                        <option value="Commercial">Commercial</option>
-                        <option value="Infrastructure">Infrastructure</option>
-                        <option value="Maintenance">Maintenance</option>
-                    </select>
-                    
-                    <label for="editContractor">Contractor:</label>
-                    <input type="text" id="editContractor">
-                    
-                    <label for="editEngineers">Engineers:</label>
-                    <input type="text" id="editEngineers">
-                    
-                    <label for="editContact1">Contact 1:</label>
-                    <input type="text" id="editContact1">
-                    
-                    <label for="editContact2">Contact 2:</label>
-                    <input type="text" id="editContact2">
-                    <div style="display: flex; gap: 10px; margin-top: 20px;">
-                        <button type="button" id="saveProjectDetailsBtn" class="button-primary" style="flex-grow: 1;">Save Changes</button>
-                        <button type="button" id="cancelEditBtn" class="button-secondary" style="flex-grow: 1;">Cancel</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h2>Task Tracker (23 Steps)</h2>
-            
-            <div class="form-section">
-                <h3>Update Task Status</h3>
-                <form id="updateTaskForm">
-                    <label for="taskId">Select Task:</label>
-                    <select id="taskId" required>
-                        <option value="">-- Select a Task --</option>
-                    </select>
-                    
-                    <label for="taskProgress">Progress (%):</label>
-                    <input type="range" id="taskProgress" min="0" max="100" value="0" oninput="this.nextElementSibling.value=this.value+'%'">
-                    <output>0%</output>
-                    
-                    <label for="taskDue">New Due Date:</label>
-                    <input type="date" id="taskDue">
-                    
-                    <button type="submit" class="button-primary">Update Task</button>
-                </form>
-            </div>
-
-            <h3 style="margin-top: 25px;">Full Project Task List</h3>
-            <div class="table-container">
-                <table id="taskTable">
-                    <thead>
-                        <tr>
-                            <th>Task</th>
-                            <th>Responsible</th>
-                            <th>Progress</th>
-                            <th>Due Date</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="taskTableBody">
-                        <tr><td colspan="5">No tasks loaded...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h2>Material Dispatch Tracker</h2>
-
-            <div class="form-section">
-                <h3>Record Dispatch/Update Material</h3>
-                <form id="recordDispatchForm">
-                    
-                    <label for="materialItemId">Select Existing Material:</label>
-                    <select id="materialItemId">
-                        <option value="">-- Select Existing Material --</option>
-                    </select>
-
-                    <label for="newMaterialName">OR New Material Name:</label>
-                    <input type="text" id="newMaterialName">
-                    
-                    <label for="requiredQuantity">Required Quantity (Only for New Material):</label>
-                    <input type="number" id="requiredQuantity" min="0">
-                    
-                    <label for="dispatchQuantity">Dispatch Quantity (0 for New Material First Entry):</label>
-                    <input type="number" id="dispatchQuantity" min="0" required>
-
-                    <label for="materialUnit">Unit (e.g., Unit, Ton, M):</label>
-                    <input type="text" id="materialUnit" required>
-
-                    <button type="submit" class="button-primary">Record Dispatch</button>
-                </form>
+    <!-- New Project Modal -->
+    <div id="newProjectModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-40 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h2 class="text-2xl font-bold text-gray-800">Create New Project</h2>
+                <button id="closeNewProjectModal" class="text-gray-400 hover:text-gray-600 transition duration-150">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
             </div>
             
-            <h3 style="margin-top: 25px;">Material Status Overview</h3>
-            <div class="table-container">
-                <table id="materialTable">
-                    <thead>
-                        <tr>
-                            <th>Item Name</th>
-                            <th>Required Qty</th>
-                            <th>Dispatched Qty</th>
-                            <th>Balance Qty</th>
-                            <th>Progress</th>
-                        </tr>
-                    </thead>
-                    <tbody id="materialTableBody">
-                        <tr><td colspan="5">No materials loaded...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="panel">
-            <h2>Expense Tracker</h2>
-
-            <div class="form-section">
-                <h3>Record New Expense</h3>
-                <form id="expenseEntryForm">
-                    <label for="expenseDate">Date:</label>
-                    <input type="date" id="expenseDate" required>
-                    
-                    <label for="expenseDescription">Description:</label>
-                    <input type="text" id="expenseDescription" required>
-                    
-                    <label for="expenseAmount">Amount (INR):</label>
-                    <input type="number" id="expenseAmount" min="0" required>
-
-                    <label for="expenseCategory">Category:</label>
-                    <select id="expenseCategory" required>
-                        <option value="Material">Material</option>
-                        <option value="Labor">Labor</option>
-                        <option value="Logistics">Logistics</option>
-                        <option value="Overhead">Overhead</option>
-                        <option value="Other">Other</option>
-                    </select>
-
-                    <button type="submit" class="button-primary">Record Expense</button>
-                </form>
-            </div>
-
-            <h3 style="margin-top: 25px;">Recent History</h3>
-            <ul id="recentExpensesList">
-                <li class="placeholder">No expenses loaded...</li>
-            </ul>
-        </div>
-
-    </div>
-    
-    <div id="newProjectModal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <h2>➕ Create New Project</h2>
-            <form id="newProjectForm">
-                <label for="newProjectID">Project ID (Unique):</label>
-                <input type="text" id="newProjectID" required>
-
-                <label for="newProjectName">Project Name:</label>
-                <input type="text" id="newProjectName" required>
+            <form id="newProjectForm" class="grid grid-cols-1 gap-4">
+                <label for="newProjectName" class="font-medium text-gray-700">Project Name:</label>
+                <input type="text" id="newProjectName" required class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
                 
-                <label for="newClientName">Client Name:</label>
-                <input type="text" id="newClientName">
+                <label for="newClientName" class="font-medium text-gray-700">Client Name:</label>
+                <input type="text" id="newClientName" class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
 
-                <label for="newProjectLocation">Location:</label>
-                <input type="text" id="newProjectLocation">
+                <label for="newProjectLocation" class="font-medium text-gray-700">Location:</label>
+                <input type="text" id="newProjectLocation" class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
 
-                <label for="newProjectStartDate">Start Date:</label>
-                <input type="date" id="newProjectStartDate" required>
+                <label for="newProjectStartDate" class="font-medium text-gray-700">Start Date:</label>
+                <input type="date" id="newProjectStartDate" required class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
 
-                <label for="newProjectDeadline">Deadline:</label>
-                <input type="date" id="newProjectDeadline">
+                <label for="newProjectDeadline" class="font-medium text-gray-700">Deadline:</label>
+                <input type="date" id="newProjectDeadline" class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
 
-                <label for="newProjectValue">Project Value (INR):</label>
-                <input type="number" id="newProjectValue" min="0" required>
+                <label for="newProjectValue" class="font-medium text-gray-700">Project Value (INR):</label>
+                <input type="number" id="newProjectValue" min="0" required class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
                 
-                <label for="newProjectType">Project Type:</label>
-                <select id="newProjectType" required>
+                <label for="newProjectType" class="font-medium text-gray-700">Project Type:</label>
+                <select id="newProjectType" required class="p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
                     <option value="Residential">Residential</option>
                     <option value="Commercial">Commercial</option>
                     <option value="Infrastructure">Infrastructure</option>
                     <option value="Maintenance">Maintenance</option>
                 </select>
 
-                <button type="submit" class="button-primary" style="margin-top: 20px;">Create Project</button>
+                <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition duration-150 ease-in-out mt-6">Create Project</button>
             </form>
         </div>
     </div>
     
-    <script src="script.js"></script>
-</body>
+    <!-- JavaScript for Firebase and Application Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+        // Firestore logging for debugging
+        setLogLevel('Debug');
+
+        // --- Environment & Firebase Initialization ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db;
+        let auth;
+        let userId;
+
+        const initFirebase = async () => {
+            try {
+                if (Object.keys(firebaseConfig).length === 0) {
+                    console.error("Firebase configuration is missing.");
+                    showMessage('Error: Firebase config missing. Cannot connect.', 'error');
+                    return;
+                }
+
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Set persistence to session to maintain login across reloads
+                await setPersistence(auth, browserSessionPersistence);
+
+                // Authenticate user
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                console.log('Firebase initialized. User ID:', userId);
+
+                // Display user ID for collaborative context
+                const userIdDisplay = document.getElementById('userIdDisplay');
+                if (userIdDisplay) {
+                    userIdDisplay.textContent = `Current User ID: ${userId}`;
+                }
+                
+                setupListeners();
+
+            } catch (error) {
+                console.error("Error during Firebase initialization or authentication:", error);
+                showMessage(`Firebase Init Error: ${error.message}`, 'error');
+            }
+        };
+
+        // --- Core Application Logic ---
+
+        /**
+         * Handles the creation of a new project and saves it to Firestore.
+         */
+        const createProject = async (e) => {
+            e.preventDefault();
+
+            if (!db || !userId) {
+                console.error("Database not ready.");
+                showMessage("Error: Database not ready. Please wait for initialization.", 'error');
+                return;
+            }
+
+            const form = e.target;
+            
+            // Collect form data
+            const projectData = {
+                name: form.newProjectName.value,
+                client: form.newClientName.value || 'N/A',
+                location: form.newProjectLocation.value || 'Unknown',
+                startDate: form.newProjectStartDate.value,
+                deadline: form.newProjectDeadline.value,
+                value: parseFloat(form.newProjectValue.value),
+                type: form.newProjectType.value,
+                
+                // Additional necessary fields for the dashboard
+                creationDate: new Date().toISOString(),
+                contractor: userId, 
+                engineers: [], // Empty array for now
+                status: 'Planning', // Default status for a new project
+                budget: parseFloat(form.newProjectValue.value) * 0.9, // Estimated 90% of value as budget
+                budgetSpent: 0,
+            };
+            
+            // Public collection path for shared projects
+            const projectsColRef = collection(db, `artifacts/${appId}/public/data/projects`);
+
+            try {
+                // Add the new document to the projects collection
+                const docRef = await addDoc(projectsColRef, projectData);
+                showMessage(`Project "${projectData.name}" created successfully!`, 'success');
+                
+                // Reset form and close modal
+                form.reset();
+                toggleModal('newProjectModal', false);
+                
+                // Note: In a full app, you would now re-fetch the project list here.
+            } catch (error) {
+                console.error("Error adding project: ", error);
+                showMessage(`Error creating project: ${error.message}`, 'error');
+            }
+        };
+
+        /**
+         * Toggles the visibility of a modal element.
+         * @param {string} modalId - The ID of the modal to toggle.
+         * @param {boolean} show - True to show, false to hide.
+         */
+        const toggleModal = (modalId, show) => {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.toggle('hidden', !show);
+            }
+        };
+
+        /**
+         * Displays a temporary message (success or error) to the user.
+         * @param {string} message - The message content.
+         * @param {'info' | 'success' | 'error'} type - The message type.
+         */
+        const showMessage = (message, type = 'info') => {
+            const msgBox = document.getElementById('messageBox');
+            const msgText = document.getElementById('messageText');
+            if (msgBox && msgText) {
+                msgText.textContent = message;
+                msgBox.classList.remove('hidden', 'bg-red-500', 'bg-green-500', 'bg-blue-500');
+                
+                let bgColor = 'bg-blue-500';
+                if (type === 'error') {
+                    bgColor = 'bg-red-500';
+                } else if (type === 'success') {
+                    bgColor = 'bg-green-500';
+                }
+                msgBox.classList.add(bgColor);
+
+                // Make sure it is visible
+                msgBox.classList.remove('opacity-0');
+                msgBox.classList.add('opacity-100');
+
+                setTimeout(() => {
+                    // Start fade out and hide
+                    msgBox.classList.remove('opacity-100');
+                    msgBox.classList.add('opacity-0');
+                    setTimeout(() => {
+                        msgBox.classList.add('hidden');
+                        msgBox.classList.remove(bgColor); // Clean up color
+                    }, 500); // Wait for fade transition
+                }, 5000);
+            }
+        };
+
+
+        // --- Event Listeners Setup ---
+        const setupListeners = () => {
+            // New Project Modal Trigger
+            document.getElementById('addProjectBtn').addEventListener('click', () => {
+                toggleModal('newProjectModal', true);
+            });
+
+            // New Project Modal Close
+            document.getElementById('closeNewProjectModal').addEventListener('click', () => {
+                toggleModal('newProjectModal', false);
+            });
+
+            // Form Submission
+            document.getElementById('newProjectForm').addEventListener('submit', createProject);
+
+            // Placeholder listeners for other buttons (no-op for now)
+            document.getElementById('deleteProjectBtn').addEventListener('click', () => {
+                showMessage("Delete Project functionality is not yet implemented.", 'info');
+            });
+            document.getElementById('projectSelector').addEventListener('change', (e) => {
+                document.getElementById('currentProjectName').textContent = e.target.options[e.target.selectedIndex].text;
+                showMessage(`Project switched to: ${e.target.value}`, 'info');
+                // Full data fetching logic would go here
+            });
+
+            // Populate initial selector with a dummy option
+            const selector = document.getElementById('projectSelector');
+            const defaultOption = document.createElement('option');
+            defaultOption.value = 'default';
+            defaultOption.textContent = '--- Select Project ---';
+            selector.appendChild(defaultOption);
+        };
+
+        // Start the application
+        initFirebase();
+    </script>
+</body>
 </html>
