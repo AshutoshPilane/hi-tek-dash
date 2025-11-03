@@ -160,56 +160,74 @@ async function loadDashboardData() {
 
 // --- 4. RENDERING FUNCTIONS (MINIMAL, SAFE VERSION) ---
 
+// INSIDE script.js
 function renderProjectDetails(project) {
-    const displayDiv = document.getElementById('projectDetailsDisplay') || document.querySelector('.panel:nth-child(1) .content');
-    if (!displayDiv) return;
-
+    const detailContainer = document.getElementById('projectDetailsDisplay');
+    if (!detailContainer) {
+        console.error("CRITICAL HTML ERROR: Missing <div id=\"projectDetailsDisplay\">.");
+        return; 
+    }
+    
     if (!project) {
-        displayDiv.innerHTML = '<p>Project Details: N/A</p>';
-        return;
+        detailContainer.innerHTML = '<p>Select a project to view details.</p>';
     }
 
-    // Safely update DOM elements
     const updateElement = (id, content) => {
         const el = document.getElementById(id);
         if (el) el.textContent = content;
     };
 
+    // --- MAPPING CLIENT-SIDE DATA TO YOUR SPECIFIC HTML IDS ---
     updateElement('display-name', project.ProjectName || project.Name || 'N/A');
-    updateElement('display-client', project.ClientName || 'N/A');
-    updateElement('display-location', project.ProjectLocation || 'N/A');
     updateElement('display-start-date', project.ProjectStartDate || 'N/A');
     updateElement('display-deadline', project.ProjectDeadline || 'N/A');
-    // Assuming you have Budget as a key in the sheet
-    updateElement('display-value', `INR ${parseFloat(project.Budget || project.ProjectValue || 0).toLocaleString('en-IN')}`);
-    updateElement('display-type', project.ProjectType || 'N/A');
+    updateElement('display-location', project.ProjectLocation || 'N/A');
     
-    // Ensure all KPIs are reset/updated too
+    // NOTE: Your sheet uses 'Budget' and your JS uses 'ProjectValue', 
+    // but your HTML uses 'display-amount'. Mapping to 'Budget' for robustness.
+    const projectValue = parseFloat(project.ProjectValue || project.Budget || 0);
+    updateElement('display-amount', `INR ${projectValue.toLocaleString('en-IN')}`);
+    
+    updateElement('display-contractor', project.Contractor || 'N/A');
+    updateElement('display-engineers', project.Engineers || 'N/A');
+    updateElement('display-contact1', project.Contact1 || 'N/A');
+    updateElement('display-contact2', project.Contact2 || 'N/A');
+    // -------------------------------------------------------------------
+    
+    // KPI Updates (assuming your KPI elements have the correct IDs)
+    updateElement('kpi-work-order', `₹ ${projectValue.toLocaleString('en-IN')}`); 
     updateElement('kpi-days-spent', 'N/A'); 
     updateElement('kpi-days-left', 'N/A');
-    updateElement('kpi-project-value', `₹ N/A`);
-    updateElement('kpi-cost-to-complete', `₹ N/A`);
+    updateElement('kpi-total-expenses', '₹ N/A');
 }
-
+// INSIDE script.js
 function renderTaskList(tasks) {
-    const taskContainer = document.getElementById('taskList') || document.getElementById('taskTableBody');
-    if (!taskContainer) return;
+    // CRITICAL: Targeting the correct <tbody> ID
+    const taskContainer = document.getElementById('taskTableBody'); 
+    if (!taskContainer) {
+        console.error("CRITICAL HTML ERROR: Missing <tbody id=\"taskTableBody\"> in the Task Tracker panel.");
+        return;
+    }
     
-    taskContainer.innerHTML = '';
+    taskContainer.innerHTML = ''; // Clear existing content
     
     if (tasks.length === 0) {
-        // Use a list item for general visibility in a list or table for general content
-        const placeholderRow = document.createElement('li');
-        placeholderRow.className = 'placeholder';
-        placeholderRow.textContent = 'No tasks loaded for this project.';
-        taskContainer.appendChild(placeholderRow);
+        // If empty, add a single placeholder row spanning all 5 columns
+        taskContainer.innerHTML = '<tr><td colspan="5">No tasks loaded for this project.</td></tr>';
         return;
     }
 
     tasks.forEach(task => {
-        const li = document.createElement('li');
-        li.textContent = `${task.TaskName} - Responsible: ${task.Responsible} - Status: ${task.Status}`;
-        taskContainer.appendChild(li);
+        const tr = document.createElement('tr');
+        // Add table cells (td) matching your table header structure
+        tr.innerHTML = `
+            <td>${task.TaskName || 'N/A'}</td>
+            <td>${task.Responsible || 'N/A'}</td>
+            <td>${task.Progress || '0'}%</td>
+            <td>${task.DueDate || 'N/A'}</td>
+            <td>${task.Status || 'Pending'}</td>
+        `;
+        taskContainer.appendChild(tr);
     });
 }
 
@@ -339,3 +357,4 @@ if (projectEditForm) {
 
 // --- 9. INITIALIZATION (Must be the last line) ---
 window.onload = loadProjects;
+
