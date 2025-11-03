@@ -1,5 +1,5 @@
 // ==============================================================================
-// script.js: FINAL OPERATIONAL VERSION (Fixed Spreadsheet Header Mismatch)
+// script.js: FINAL OPERATIONAL VERSION (Fixed Spreadsheet Header Mismatch & Display Bugs)
 // ==============================================================================
 
 // 🎯 CRITICAL: USING THE LOCAL PROXY PATH (/api)
@@ -15,6 +15,22 @@ function showMessageBox(message, type) {
     // In a full application, this would display a nice UI modal instead of alert()
 }
 
+// --- NEW HELPER FUNCTION: Date Formatting Fix for ISO Strings (Issue 1 Fix) ---
+function formatDate(isoDateString) {
+    if (!isoDateString) return 'N/A';
+    // If it's a simple YYYY-MM-DD string already, return it
+    if (isoDateString.length === 10 && isoDateString.includes('-')) {
+        return isoDateString;
+    }
+    try {
+        const date = new Date(isoDateString);
+        // Format to YYYY-MM-DD
+        return date.toISOString().split('T')[0];
+    } catch (e) {
+        return isoDateString; // Return original if parsing fails
+    }
+}
+// ------------------------------------------------------------------------------------
 
 // --- 1. THE HI TEK 23-STEP WORKFLOW LIST ---
 const HI_TEK_TASKS_MAP = [
@@ -44,27 +60,14 @@ const HI_TEK_TASKS_MAP = [
 ];
 
 
-// --- 2. FIREBASE (Placeholder for future persistence) ---
-/* NOTE: This application uses a Google Sheets backend via Vercel proxy, 
-   so Firebase is not required for data persistence. 
-*/
-
-
-// --- 3. API COMMUNICATION ---
+// --- 2. API COMMUNICATION ---
 
 /**
  * Sends a request to the Google Sheets API via the Vercel proxy.
- * @param {string} sheetName - Name of the target sheet ('Projects', 'Tasks', etc.)
- * @param {string} method - HTTP method equivalent ('GET', 'POST', 'PUT', 'DELETE')
- * @param {object} data - Data payload (for POST/PUT) or query parameters (for GET).
- * @returns {Promise<object>} The parsed JSON response from the API.
  */
 async function sendDataToSheet(sheetName, method, data = {}) {
     // Add sheetName and method to the payload for the Apps Script handler
     const payload = { sheetName, method, ...data };
-    
-    // For GET requests, parameters should be in the URL or body for doPost(e) filtering
-    // Since we use POST for all GAS calls, payload structure is consistent.
     
     // console.log(`[API] Sending ${method} request to ${sheetName} with data:`, payload);
 
@@ -92,7 +95,7 @@ async function sendDataToSheet(sheetName, method, data = {}) {
 }
 
 
-// --- 4. DATA LOADING AND SELECTION ---
+// --- 3. DATA LOADING AND SELECTION ---
 
 const projectSelector = document.getElementById('projectSelector');
 const currentProjectNameDisplay = document.getElementById('currentProjectName');
@@ -176,7 +179,7 @@ if (projectSelector) {
 }
 
 
-// --- 5. DASHBOARD UPDATING AND KPI CALCULATION ---
+// --- 4. DASHBOARD UPDATING AND KPI CALCULATION ---
 
 function resetDashboard() {
     currentProjectNameDisplay.textContent = 'Select a Project';
@@ -259,9 +262,14 @@ async function updateDashboard(projectID) {
  * Updates the Project Details panel and related date/value KPIs.
  */
 function updateProjectDetails(project) {
+    // --- Issue 1 Fix: Use formatDate for dates ---
+    const startDate = formatDate(project.StartDate);
+    const deadline = formatDate(project.Deadline);
+    // ---------------------------------------------
+
     document.getElementById('display-name').textContent = project.Name || 'N/A';
-    document.getElementById('display-start-date').textContent = project.StartDate || 'N/A';
-    document.getElementById('display-deadline').textContent = project.Deadline || 'N/A';
+    document.getElementById('display-start-date').textContent = startDate;
+    document.getElementById('display-deadline').textContent = deadline;
     document.getElementById('display-location').textContent = project.ProjectLocation || 'N/A';
     document.getElementById('display-amount').textContent = `₹ ${formatNumber(project.Budget)}` || 'N/A'; // Use Budget
     document.getElementById('display-contractor').textContent = project.Contractor || 'N/A';
@@ -274,20 +282,20 @@ function updateProjectDetails(project) {
     if(kpiWorkOrder) kpiWorkOrder.textContent = `₹ ${formatNumber(project.Budget || 0)}`;
 
     // Calculate Date KPIs
-    const startDate = project.StartDate ? new Date(project.StartDate) : null;
-    const deadline = project.Deadline ? new Date(project.Deadline) : null;
-    const today = new Date();
+    const dateToday = new Date();
+    const dateStart = new Date(startDate);
+    const dateDeadline = new Date(deadline);
 
-    if (startDate) {
-        const timeSpent = today.getTime() - startDate.getTime();
+    if (startDate !== 'N/A') {
+        const timeSpent = dateToday.getTime() - dateStart.getTime();
         const daysSpent = Math.floor(timeSpent / (1000 * 60 * 60 * 24));
         document.getElementById('kpi-days-spent').textContent = daysSpent >= 0 ? `${daysSpent} days` : '0 days';
     } else {
         document.getElementById('kpi-days-spent').textContent = 'N/A';
     }
 
-    if (deadline) {
-        const timeRemaining = deadline.getTime() - today.getTime();
+    if (deadline !== 'N/A') {
+        const timeRemaining = dateDeadline.getTime() - dateToday.getTime();
         const daysLeft = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
         document.getElementById('kpi-days-left').textContent = daysLeft >= 0 ? `${daysLeft} days left` : 'OVERDUE!';
         if (daysLeft < 0) {
@@ -300,7 +308,7 @@ function updateProjectDetails(project) {
     }
 }
 
-// --- 6. TASK TRACKER LOGIC ---
+// --- 5. TASK TRACKER LOGIC ---
 
 function renderTasks(tasks) {
     const taskTableBody = document.getElementById('taskTableBody');
@@ -317,26 +325,30 @@ function renderTasks(tasks) {
 
     tasks.forEach(task => {
         const row = taskTableBody.insertRow();
-        const statusClass = task.Status.toLowerCase().replace(' ', '-');
+        const progressValue = parseFloat(task.Progress) || 0; // Fix Issue 2: Safely read Progress
+        const dueDateText = formatDate(task.DueDate); // Fix Issue 2: Format Due Date
+        const status = task.Status || (progressValue === 100 ? 'Completed' : (progressValue > 0 ? 'In Progress' : 'Pending'));
+        const statusClass = status.toLowerCase().replace(' ', '-');
+
 
         row.insertCell().textContent = task.TaskName;
-        row.insertCell().textContent = task.Responsible;
+        row.insertCell().textContent = task.Responsible || 'N/A';
         
         // Progress Cell
         const progressCell = row.insertCell();
-        progressCell.innerHTML = `<span class="progress-bar-wrap"><span class="progress-bar" style="width: ${task.Progress}%;"></span></span> ${task.Progress}%`;
+        progressCell.innerHTML = `<span class="progress-bar-wrap"><span class="progress-bar" style="width: ${progressValue}%;"></span></span> ${progressValue}%`;
 
-        row.insertCell().textContent = task.DueDate || 'N/A';
+        row.insertCell().textContent = dueDateText;
         
         // Status Cell
         const statusCell = row.insertCell();
-        statusCell.innerHTML = `<span class="status-badge status-${statusClass}">${task.Status}</span>`;
+        statusCell.innerHTML = `<span class="status-badge status-${statusClass}">${status}</span>`;
 
         // Populate the dropdown selector
         if (taskSelector) {
             const option = document.createElement('option');
             option.value = task.TaskID;
-            option.textContent = `${task.TaskName} (${task.Progress}%)`;
+            option.textContent = `${task.TaskName} (${progressValue}%)`;
             taskSelector.appendChild(option);
         }
     });
@@ -380,9 +392,6 @@ if (updateTaskForm) {
             Status: status,
         };
 
-        // Note: The GAS PUT handler currently only searches by ProjectID. 
-        // For a Tasks sheet, it would need to search by both ProjectID and TaskID.
-        // Assuming your backend is modified to handle multi-key search for now:
         const result = await sendDataToSheet('Tasks', 'PUT', updatedData);
 
         if (result.status === 'success') {
@@ -395,7 +404,7 @@ if (updateTaskForm) {
 }
 
 
-// --- 7. MATERIAL TRACKER LOGIC ---
+// --- 6. MATERIAL TRACKER LOGIC ---
 
 function renderMaterials(materials) {
     const materialTableBody = document.getElementById('materialTableBody');
@@ -410,9 +419,11 @@ function renderMaterials(materials) {
         return;
     }
     
-    materials.forEach((material, index) => {
-        const required = parseFloat(material.RequiredQuantity) || 0;
+    materials.forEach((material) => {
+        // Fix Issue 3: Safely parse numbers
+        const required = parseFloat(material.RequiredQuantity) || 0; 
         const dispatched = parseFloat(material.DispatchedQuantity) || 0;
+        
         const balance = required - dispatched;
         const progress = required > 0 ? Math.round((dispatched / required) * 100) : 0;
         const unit = material.Unit || 'Unit';
@@ -433,7 +444,7 @@ function renderMaterials(materials) {
             const option = document.createElement('option');
             // Assuming MaterialName is unique enough or the backend can handle lookups
             option.value = material.MaterialName; 
-            option.textContent = `${material.MaterialName} (${balance} ${unit} remaining)`;
+            option.textContent = `${material.MaterialName} (${formatNumber(balance)} ${unit} remaining)`;
             materialItemIdSelector.appendChild(option);
         }
     });
@@ -445,6 +456,7 @@ function calculateMaterialKPI(materials) {
         return;
     }
     
+    // Fix Issue 3: Safely parse numbers
     const totalRequired = materials.reduce((sum, m) => sum + (parseFloat(m.RequiredQuantity) || 0), 0);
     const totalDispatched = materials.reduce((sum, m) => sum + (parseFloat(m.DispatchedQuantity) || 0), 0);
 
@@ -476,19 +488,13 @@ if (recordDispatchForm) {
 
         if (materialItemId) {
             // Case 1: Updating an existing material (Dispatch)
-            // This requires the backend to implement a custom update logic (PUT) for materials.
-            // For simplicity and immediate fix, we'll assume the front-end sends a PUT
-            // with the updated DispatchQuantity (Backend would need to handle the sum)
-            const materialToUpdate = allProjects.find(p => p.ProjectID === currentProjectID).Materials.find(m => m.MaterialName === materialItemId);
-            
             const updatedData = {
                 ProjectID: currentProjectID,
                 MaterialName: materialItemId,
-                // Assuming backend logic handles adding dispatchQuantity to the existing DispatchedQuantity
-                DispatchQuantity: dispatchQuantity // Front-end sends the new dispatch amount
+                DispatchQuantity: dispatchQuantity
             };
 
-            result = await sendDataToSheet('Materials', 'PUT', updatedData); // PUT logic in GAS must be robust
+            result = await sendDataToSheet('Materials', 'PUT', updatedData); 
 
         } else if (newMaterialName) {
             // Case 2: Adding a new material (POST)
@@ -517,7 +523,7 @@ if (recordDispatchForm) {
 }
 
 
-// --- 8. EXPENSE TRACKER LOGIC ---
+// --- 7. EXPENSE TRACKER LOGIC ---
 
 function renderExpenses(expenses) {
     const recentExpensesList = document.getElementById('recentExpensesList');
@@ -535,7 +541,8 @@ function renderExpenses(expenses) {
     
     expenses.slice(0, 10).forEach(expense => {
         const li = document.createElement('li');
-        li.innerHTML = `<strong>${expense.Date}</strong>: ${expense.Description} (${expense.Category}) - <span class="expense-amount">₹ ${formatNumber(expense.Amount)}</span>`;
+        const expenseDate = formatDate(expense.Date); // Format date
+        li.innerHTML = `<strong>${expenseDate}</strong>: ${expense.Description} (${expense.Category}) - <span class="expense-amount">₹ ${formatNumber(expense.Amount)}</span>`;
         recentExpensesList.appendChild(li);
     });
 }
@@ -577,7 +584,7 @@ if (expenseEntryForm) {
 }
 
 
-// --- 9. PROJECT MANAGEMENT (NEW, EDIT, DELETE) ---
+// --- 8. PROJECT MANAGEMENT (NEW, EDIT, DELETE) ---
 
 const newProjectModal = document.getElementById('newProjectModal');
 const addProjectBtn = document.getElementById('addProjectBtn');
@@ -617,15 +624,15 @@ if (newProjectForm) {
             return;
         }
         
-        // --- CRITICAL FIX: Changed keys from ProjectName/ProjectValue to Name/Budget ---
+        // --- CRITICAL: Project data keys must match Sheet Headers ---
         const projectData = {
             ProjectID: newProjectID,
-            Name: document.getElementById('newProjectName').value, // FIX: Matches Sheet Header 'Name'
+            Name: document.getElementById('newProjectName').value, // Matches Sheet Header 'Name'
             ClientName: document.getElementById('newClientName').value,
             ProjectLocation: document.getElementById('newProjectLocation').value,
-            StartDate: document.getElementById('newProjectStartDate').value, // FIX: Matches Sheet Header 'StartDate'
-            Deadline: document.getElementById('newProjectDeadline').value, // FIX: Matches Sheet Header 'Deadline'
-            Budget: parseFloat(document.getElementById('newProjectValue').value) || 0, // FIX: Matches Sheet Header 'Budget'
+            StartDate: document.getElementById('newProjectStartDate').value, // Matches Sheet Header 'StartDate'
+            Deadline: document.getElementById('newProjectDeadline').value, // Matches Sheet Header 'Deadline'
+            Budget: parseFloat(document.getElementById('newProjectValue').value) || 0, // Matches Sheet Header 'Budget'
             ProjectType: document.getElementById('newProjectType').value,
             Contractor: '',
             Engineers: '',
@@ -640,8 +647,8 @@ if (newProjectForm) {
             TaskID: `${newProjectID}-T${index + 1}`,
             TaskName: task.Name,
             Responsible: task.Responsible,
-            DueDate: '', 
-            Progress: '0',
+            DueDate: '', // Matches required sheet header 'DueDate'
+            Progress: '0', // Matches required sheet header 'Progress'
             Status: 'Pending',
         }));
 
@@ -706,8 +713,8 @@ if (editProjectDetailsBtn) {
         document.getElementById('editProjectID').value = project.ProjectID;
         document.getElementById('editProjectName').value = project.Name || ''; // FIX: Name
         document.getElementById('editClientName').value = project.ClientName || '';
-        document.getElementById('editProjectStartDate').value = project.StartDate || '';
-        document.getElementById('editProjectDeadline').value = project.Deadline || '';
+        document.getElementById('editProjectStartDate').value = formatDate(project.StartDate);
+        document.getElementById('editProjectDeadline').value = formatDate(project.Deadline);
         document.getElementById('editProjectLocation').value = project.ProjectLocation || '';
         document.getElementById('editProjectValue').value = project.Budget || 0; // FIX: Budget
         document.getElementById('editProjectType').value = project.ProjectType || 'Residential';
@@ -731,7 +738,7 @@ if (projectEditForm) {
         if (e.target.id !== 'saveProjectDetailsBtn') return; 
         e.preventDefault();
 
-        // --- CRITICAL FIX: Changed keys from ProjectName/ProjectValue to Name/Budget ---
+        // --- CRITICAL: Project data keys must match Sheet Headers ---
         const updatedData = {
             ProjectID: document.getElementById('editProjectID').value,
             Name: document.getElementById('editProjectName').value, // FIX: Matches Sheet Header 'Name'
@@ -789,7 +796,7 @@ if (deleteProjectBtn) {
 }
 
 
-// --- 10. HELPER FUNCTIONS ---
+// --- 9. HELPER FUNCTIONS ---
 
 function formatNumber(num) {
     return new Intl.NumberFormat('en-IN', { 
@@ -800,6 +807,6 @@ function formatNumber(num) {
 }
 
 
-// --- 11. INITIALIZATION ---
+// --- 10. INITIALIZATION ---
 
 window.onload = loadProjects;
