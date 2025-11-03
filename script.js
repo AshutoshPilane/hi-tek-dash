@@ -1,5 +1,5 @@
 // ==============================================================================
-// script.js: FINAL OPERATIONAL VERSION (Fixed Spreadsheet Header Mismatch & Display Bugs)
+// script.js: FINAL OPERATIONAL VERSION (Fixed Dispatch/Task Updates & KPI Calculation)
 // ==============================================================================
 
 // 🎯 CRITICAL: USING THE LOCAL PROXY PATH (/api)
@@ -7,12 +7,24 @@ const SHEET_API_URL = "/api";
 
 let currentProjectID = null; 
 let allProjects = [];
+// Store full material data to allow lookup for dispatch updates
+let currentMaterialsData = []; 
+let currentTasksData = []; 
+
 
 // --- DUMMY FUNCTION for error/success messages (Required for error-free execution) ---
-// This prevents crashes from missing showMessageBox calls.
 function showMessageBox(message, type) {
     console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
     // In a full application, this would display a nice UI modal instead of alert()
+    const messageContainer = document.getElementById('message-container');
+    if (messageContainer) {
+        messageContainer.textContent = message;
+        messageContainer.className = `message-box message-${type}`;
+        messageContainer.style.display = 'block';
+        setTimeout(() => {
+            messageContainer.style.display = 'none';
+        }, 5000);
+    }
 }
 
 // --- NEW HELPER FUNCTION: Date Formatting Fix for ISO Strings (Issue 1 Fix) ---
@@ -123,12 +135,10 @@ async function loadProjects() {
         }
         
         currentProjectID = projectToLoadID;
-        // console.log(`DEBUG LOAD: Determined project to load: ${projectToLoadID}`);
         
         if (projectToLoadID) {
             if (projectSelector) {
                  projectSelector.value = projectToLoadID;
-                 // console.log(`DEBUG LOAD: Successfully selected option ${projectToLoadID} in UI.`);
             }
             await updateDashboard(projectToLoadID);
         } else {
@@ -230,20 +240,24 @@ async function updateDashboard(projectID) {
     // 2. Load Tasks and Update Task Tracker / Progress KPI
     const taskResult = await sendDataToSheet('Tasks', 'GET', { ProjectID: projectID });
     if (taskResult.status === 'success') {
-        renderTasks(taskResult.data);
-        calculateTaskKPI(taskResult.data);
+        currentTasksData = taskResult.data; // Store for lookups
+        renderTasks(currentTasksData);
+        calculateTaskKPI(currentTasksData);
     } else {
         console.error('Failed to load tasks:', taskResult.message);
+        currentTasksData = [];
         renderTasks([]);
     }
 
     // 3. Load Materials and Update Material Tracker / Material KPI
     const materialResult = await sendDataToSheet('Materials', 'GET', { ProjectID: projectID });
     if (materialResult.status === 'success') {
-        renderMaterials(materialResult.data);
-        calculateMaterialKPI(materialResult.data);
+        currentMaterialsData = materialResult.data; // Store for lookups
+        renderMaterials(currentMaterialsData);
+        calculateMaterialKPI(currentMaterialsData);
     } else {
         console.error('Failed to load materials:', materialResult.message);
+        currentMaterialsData = [];
         renderMaterials([]);
     }
 
@@ -298,10 +312,11 @@ function updateProjectDetails(project) {
         const timeRemaining = dateDeadline.getTime() - dateToday.getTime();
         const daysLeft = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
         document.getElementById('kpi-days-left').textContent = daysLeft >= 0 ? `${daysLeft} days left` : 'OVERDUE!';
+        const kpiDaysLeftElement = document.getElementById('kpi-days-left');
         if (daysLeft < 0) {
-            document.getElementById('kpi-days-left').classList.add('overdue');
+            kpiDaysLeftElement.classList.add('overdue');
         } else {
-            document.getElementById('kpi-days-left').classList.remove('overdue');
+            kpiDaysLeftElement.classList.remove('overdue');
         }
     } else {
         document.getElementById('kpi-days-left').textContent = 'N/A';
@@ -325,8 +340,8 @@ function renderTasks(tasks) {
 
     tasks.forEach(task => {
         const row = taskTableBody.insertRow();
-        const progressValue = parseFloat(task.Progress) || 0; // Fix Issue 2: Safely read Progress
-        const dueDateText = formatDate(task.DueDate); // Fix Issue 2: Format Due Date
+        const progressValue = parseFloat(task.Progress) || 0; 
+        const dueDateText = formatDate(task.DueDate); 
         const status = task.Status || (progressValue === 100 ? 'Completed' : (progressValue > 0 ? 'In Progress' : 'Pending'));
         const statusClass = status.toLowerCase().replace(' ', '-');
 
@@ -354,14 +369,22 @@ function renderTasks(tasks) {
     });
 }
 
+// FIX: Project Progress % Calculation (Issue 4)
 function calculateTaskKPI(tasks) {
+    const kpiProgressElement = document.getElementById('kpi-progress');
+    if (!kpiProgressElement) return;
+
     if (tasks.length === 0) {
-        document.getElementById('kpi-progress').textContent = '0%';
+        kpiProgressElement.textContent = '0%';
         return;
     }
+    
+    // Ensure all progress values are safely converted to numbers
     const totalProgress = tasks.reduce((sum, task) => sum + (parseFloat(task.Progress) || 0), 0);
+    
+    // Calculate the average progress
     const averageProgress = Math.round(totalProgress / tasks.length);
-    document.getElementById('kpi-progress').textContent = `${averageProgress}%`;
+    kpiProgressElement.textContent = `${averageProgress}%`;
 }
 
 
@@ -382,12 +405,14 @@ if (updateTaskForm) {
             return;
         }
 
-        const status = progress === '100' ? 'Completed' : (progress === '0' ? 'Pending' : 'In Progress');
+        const progressValue = parseFloat(progress) || 0;
+        const status = progressValue === 100 ? 'Completed' : (progressValue === 0 ? 'Pending' : 'In Progress');
         
+        // FIX: Ensure correct keys are used for the PUT request (Issue 2)
         const updatedData = {
             ProjectID: currentProjectID,
             TaskID: taskID,
-            Progress: progress,
+            Progress: progressValue.toString(), // Send as string/number as appropriate for GAS
             DueDate: dueDate,
             Status: status,
         };
@@ -420,7 +445,7 @@ function renderMaterials(materials) {
     }
     
     materials.forEach((material) => {
-        // Fix Issue 3: Safely parse numbers
+        // Safely parse numbers
         const required = parseFloat(material.RequiredQuantity) || 0; 
         const dispatched = parseFloat(material.DispatchedQuantity) || 0;
         
@@ -442,7 +467,7 @@ function renderMaterials(materials) {
         // Populate the dropdown selector
         if (materialItemIdSelector) {
             const option = document.createElement('option');
-            // Assuming MaterialName is unique enough or the backend can handle lookups
+            // Using MaterialName as the value for lookup later
             option.value = material.MaterialName; 
             option.textContent = `${material.MaterialName} (${formatNumber(balance)} ${unit} remaining)`;
             materialItemIdSelector.appendChild(option);
@@ -450,13 +475,17 @@ function renderMaterials(materials) {
     });
 }
 
+// FIX: Material Dispatch % KPI Calculation (Issue 3)
 function calculateMaterialKPI(materials) {
+    const kpiMaterialProgressElement = document.getElementById('kpi-material-progress');
+    if (!kpiMaterialProgressElement) return;
+
     if (materials.length === 0) {
-        document.getElementById('kpi-material-progress').textContent = '0% Dispatched';
+        kpiMaterialProgressElement.textContent = '0% Dispatched';
         return;
     }
     
-    // Fix Issue 3: Safely parse numbers
+    // Safely parse numbers
     const totalRequired = materials.reduce((sum, m) => sum + (parseFloat(m.RequiredQuantity) || 0), 0);
     const totalDispatched = materials.reduce((sum, m) => sum + (parseFloat(m.DispatchedQuantity) || 0), 0);
 
@@ -464,7 +493,7 @@ function calculateMaterialKPI(materials) {
     if (totalRequired > 0) {
         overallProgress = Math.round((totalDispatched / totalRequired) * 100);
     }
-    document.getElementById('kpi-material-progress').textContent = `${overallProgress}% Dispatched`;
+    kpiMaterialProgressElement.textContent = `${overallProgress}% Dispatched`;
 }
 
 
@@ -487,11 +516,22 @@ if (recordDispatchForm) {
         let result;
 
         if (materialItemId) {
-            // Case 1: Updating an existing material (Dispatch)
+            // Case 1: Updating an existing material (Dispatch) (Issue 1 Fix)
+            const existingMaterial = currentMaterialsData.find(m => m.MaterialName === materialItemId);
+            
+            if (!existingMaterial) {
+                 showMessageBox('Error: Existing material not found in current data.', 'error');
+                 return;
+            }
+
+            const currentDispatched = parseFloat(existingMaterial.DispatchedQuantity) || 0;
+            const newTotalDispatched = currentDispatched + dispatchQuantity;
+
+            // CRITICAL: Send only the necessary keys for the update
             const updatedData = {
                 ProjectID: currentProjectID,
                 MaterialName: materialItemId,
-                DispatchQuantity: dispatchQuantity
+                DispatchedQuantity: newTotalDispatched.toString() // Send the accumulated total
             };
 
             result = await sendDataToSheet('Materials', 'PUT', updatedData); 
@@ -634,10 +674,10 @@ if (newProjectForm) {
             Deadline: document.getElementById('newProjectDeadline').value, // Matches Sheet Header 'Deadline'
             Budget: parseFloat(document.getElementById('newProjectValue').value) || 0, // Matches Sheet Header 'Budget'
             ProjectType: document.getElementById('newProjectType').value,
-            Contractor: '',
-            Engineers: '',
-            Contact1: '',
-            Contact2: '',
+            Contractor: document.getElementById('newContractor').value,
+            Engineers: document.getElementById('newEngineers').value,
+            Contact1: document.getElementById('newContact1').value,
+            Contact2: document.getElementById('newContact2').value,
             CreationDate: new Date().toISOString().split('T')[0]
         };
         // -----------------------------------------------------------------------------
@@ -733,8 +773,8 @@ if (cancelEditBtn) {
 
 const projectEditForm = document.getElementById('projectEditForm');
 if (projectEditForm) {
-    projectEditForm.addEventListener('click', async (e) => {
-        // We listen on the form but check the specific save button click
+    // Listening for a click on the form but checking for the save button click
+    projectEditForm.addEventListener('click', async (e) => { 
         if (e.target.id !== 'saveProjectDetailsBtn') return; 
         e.preventDefault();
 
