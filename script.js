@@ -2,31 +2,48 @@
 // script.js: FINAL ROBUST & ERROR-FREE OPERATIONAL VERSION
 // =============================================================================
 
+// 🎯 CRITICAL: USING THE LOCAL PROXY PATH (/api)
 const SHEET_API_URL = "/api"; 
 
-// --- CRITICAL GLOBAL VARIABLE DECLARATIONS (MUST BE AT THE TOP) ---
+// --- CRITICAL GLOBAL VARIABLE DECLARATIONS (MUST BE AT THE VERY TOP) ---
 let currentProjectID = null; 
 let allProjects = [];
 let projectIDToSelect = null; // Used to select the new project after creation
 
-// DOM Element References
+// DOM Element References (All must be defined here to prevent ReferenceErrors)
 const projectSelector = document.getElementById('projectSelector');
 const currentProjectName = document.getElementById('currentProjectName');
+
+// New Project Modal Elements
 const newProjectModal = document.getElementById('newProjectModal');
 const addProjectBtn = document.getElementById('addProjectBtn');
 const newProjectForm = document.getElementById('newProjectForm');
-const closeButton = newProjectModal ? newProjectModal.querySelector('.close-button') : null; 
+const closeNewProjectBtn = newProjectModal ? newProjectModal.querySelector('.close-button') : null; 
+
+// Edit Project Modal Elements
+const editProjectDetailsBtn = document.getElementById('editProjectDetailsBtn');
+const projectEditModal = document.getElementById('projectEditModal');
+const projectEditForm = document.getElementById('projectEditForm');
+const cancelEditBtn = document.getElementById('cancelEditBtn');
 
 
-// --- UTILITY (API Compatibility & Messaging) ---
-
+// --- DUMMY FUNCTION for error/success messages (Required for error-free execution) ---
 function showMessageBox(message, type) {
     console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
-    // Optional: alert(message);
+    // You can replace this with an alert(message) or a simple UI element
 }
 
+// --- 1. THE HI TEK 23-STEP WORKFLOW LIST (KEEP FOR POTENTIAL CLIENT-SIDE USE) ---
+const HI_TEK_TASKS_MAP = [
+    { Name: '1. Understanding the System', Responsible: 'Project Manager' },
+    // ... (Your 23 tasks array content)
+];
+
+
+// --- 2. UTILITY: API Communication ---
+
 async function sendDataToSheet(sheetName, method, data = {}) {
-    let payload = { sheetName, method, ...data }; // Merge data at top level
+    let payload = { sheetName, method, ...data };
 
     try {
         const response = await fetch(SHEET_API_URL, {
@@ -44,13 +61,13 @@ async function sendDataToSheet(sheetName, method, data = {}) {
         }
 
     } catch (error) {
-        console.error(`API Error:`, error);
+        console.error(`API Error on ${method} ${sheetName}:`, error);
         return { status: 'error', message: error.message };
     }
 }
 
 
-// --- PROJECT & UI MANAGEMENT ---
+// --- 3. PROJECT & UI MANAGEMENT ---
 
 async function loadProjects() {
     const result = await sendDataToSheet('Projects', 'GET');
@@ -58,16 +75,20 @@ async function loadProjects() {
     if (result.status === 'success' && Array.isArray(result.data)) {
         allProjects = result.data;
         projectSelector.innerHTML = '<option value="">-- Select Project --</option>';
-
-        // 1. Sort projects by ID (or name) if needed, but we'll use a direct target ID.
         
-        // Determine which ID to select: use the newly created ID, otherwise use the current ID, otherwise the newest one.
-        const targetID = projectIDToSelect || currentProjectID || (allProjects.length > 0 ? allProjects[0].ProjectID : null);
+        // Use a temporary ID if a new project was just created, otherwise stick to current
+        let targetID = projectIDToSelect || currentProjectID;
+        
+        if (!targetID && allProjects.length > 0) {
+            // Default to the first project if nothing is selected
+            targetID = allProjects[0].ProjectID; 
+        }
 
         allProjects.forEach(project => {
             const option = document.createElement('option');
             option.value = project.ProjectID;
-            option.textContent = project.ProjectName;
+            // Use the ProjectName property (remapped in Apps Script)
+            option.textContent = project.ProjectName || project.Name || 'Unnamed Project'; 
             projectSelector.appendChild(option);
         });
 
@@ -83,20 +104,35 @@ async function loadProjects() {
         
         if (currentProjectID) {
             await loadDashboardData();
+        } else {
+            // Clear all panels if no project is selected
+            currentProjectName.textContent = 'Select a Project';
+            renderProjectDetails(null);
+            renderTaskList([]); // Clear tasks
+            // (You would add logic to clear other panels here)
         }
 
     } else {
         console.error("Failed to load projects:", result.message);
         currentProjectName.textContent = 'ERROR: Cannot load projects.';
+        // If the fetch fails completely, show an error and clear everything
+        renderProjectDetails(null); 
+        renderTaskList([]);
     }
 }
 
-projectSelector.addEventListener('change', async (e) => {
-    currentProjectID = e.target.value;
-    if (currentProjectID) {
-        await loadDashboardData();
-    }
-});
+// Initial listener
+if (projectSelector) {
+    projectSelector.addEventListener('change', async (e) => {
+        currentProjectID = e.target.value;
+        if (currentProjectID) {
+            await loadDashboardData();
+        } else {
+            // Handle 'Select Project' option being chosen
+            loadProjects(); 
+        }
+    });
+}
 
 async function loadDashboardData() {
     if (!currentProjectID) return;
@@ -111,70 +147,84 @@ async function loadDashboardData() {
     
     // 3. Render Data
     if (project) {
-        currentProjectName.textContent = project.ProjectName;
+        currentProjectName.textContent = project.ProjectName || project.Name || 'Project Details';
         renderProjectDetails(project);
-        renderTaskList(tasks); // Ensure this function is defined if you need tasks to display
+        renderTaskList(tasks); 
     } else {
         currentProjectName.textContent = 'Project Not Found';
         renderProjectDetails(null);
+        renderTaskList([]);
     }
 }
 
 
-// --- RENDERING FUNCTIONS (WITH CRITICAL NULL CHECKS) ---
+// --- 4. RENDERING FUNCTIONS (MINIMAL, SAFE VERSION) ---
 
 function renderProjectDetails(project) {
+    const displayDiv = document.getElementById('projectDetailsDisplay') || document.querySelector('.panel:nth-child(1) .content');
+    if (!displayDiv) return;
+
     if (!project) {
-        const displayDiv = document.getElementById('projectDetailsDisplay');
-        if (displayDiv) displayDiv.innerHTML = '<p>No details available.</p>';
+        displayDiv.innerHTML = '<p>Project Details: N/A</p>';
         return;
     }
 
-    // Safely update DOM elements (the element check prevents the crash)
+    // Safely update DOM elements
     const updateElement = (id, content) => {
         const el = document.getElementById(id);
         if (el) el.textContent = content;
     };
 
-    updateElement('display-name', project.ProjectName || 'N/A');
+    updateElement('display-name', project.ProjectName || project.Name || 'N/A');
     updateElement('display-client', project.ClientName || 'N/A');
     updateElement('display-location', project.ProjectLocation || 'N/A');
     updateElement('display-start-date', project.ProjectStartDate || 'N/A');
     updateElement('display-deadline', project.ProjectDeadline || 'N/A');
-    updateElement('display-value', `INR ${parseFloat(project.ProjectValue || 0).toLocaleString('en-IN')}`);
+    // Assuming you have Budget as a key in the sheet
+    updateElement('display-value', `INR ${parseFloat(project.Budget || project.ProjectValue || 0).toLocaleString('en-IN')}`);
     updateElement('display-type', project.ProjectType || 'N/A');
+    
+    // Ensure all KPIs are reset/updated too
+    updateElement('kpi-days-spent', 'N/A'); 
+    updateElement('kpi-days-left', 'N/A');
+    updateElement('kpi-project-value', `₹ N/A`);
+    updateElement('kpi-cost-to-complete', `₹ N/A`);
 }
 
 function renderTaskList(tasks) {
-    // This is a placeholder. You need to implement this to match your HTML structure.
     const taskContainer = document.getElementById('taskList') || document.getElementById('taskTableBody');
     if (!taskContainer) return;
     
     taskContainer.innerHTML = '';
     
     if (tasks.length === 0) {
-        taskContainer.innerHTML = '<li class="placeholder">No tasks loaded for this project.</li>';
+        // Use a list item for general visibility in a list or table for general content
+        const placeholderRow = document.createElement('li');
+        placeholderRow.className = 'placeholder';
+        placeholderRow.textContent = 'No tasks loaded for this project.';
+        taskContainer.appendChild(placeholderRow);
         return;
     }
-    // ... (Your actual task rendering logic goes here)
+
+    tasks.forEach(task => {
+        const li = document.createElement('li');
+        li.textContent = `${task.TaskName} - Responsible: ${task.Responsible} - Status: ${task.Status}`;
+        taskContainer.appendChild(li);
+    });
 }
 
 
-// --- PROJECT ADDITION LOGIC ---
+// --- 5. PROJECT ADDITION LOGIC (Modal Show/Hide) ---
 
-// 2. Show/Hide Modal Logic
-if (addProjectBtn && newProjectModal && closeButton) {
-    // Show modal
+if (addProjectBtn && newProjectModal && closeNewProjectBtn) {
     addProjectBtn.addEventListener('click', () => {
         newProjectModal.style.display = 'block';
     });
 
-    // Hide modal via 'x' button
-    closeButton.addEventListener('click', () => {
+    closeNewProjectBtn.addEventListener('click', () => {
         newProjectModal.style.display = 'none';
     });
 
-    // Hide modal when clicking outside of it
     window.addEventListener('click', (event) => {
         if (event.target == newProjectModal) {
             newProjectModal.style.display = 'none';
@@ -183,7 +233,8 @@ if (addProjectBtn && newProjectModal && closeButton) {
 }
 
 
-// 3. Form Submission (POST Request)
+// --- 6. PROJECT ADDITION FORM SUBMISSION (POST Request) ---
+
 if (newProjectForm) {
     newProjectForm.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -191,7 +242,9 @@ if (newProjectForm) {
         const newProjectData = {
             ProjectID: document.getElementById('newProjectID').value,
             ProjectName: document.getElementById('newProjectName').value,
-            ClientName: document.getElementById('newClientName').value,
+            // The Apps Script expects ProjectName here, but POST to the sheet
+            // maps it to the 'Name' column. This is correct.
+            ClientName: document.getElementById('newClientName').value, 
             ProjectLocation: document.getElementById('newProjectLocation').value,
             ProjectStartDate: document.getElementById('newProjectStartDate').value,
             ProjectDeadline: document.getElementById('newProjectDeadline').value,
@@ -220,6 +273,69 @@ if (newProjectForm) {
     });
 }
 
+// --- 7. EDIT PROJECT LOGIC (Modal Show/Hide) ---
 
-// --- INITIALIZATION ---
+if (editProjectDetailsBtn && projectEditModal) {
+    editProjectDetailsBtn.addEventListener('click', () => {
+        if (!currentProjectID) {
+            showMessageBox('Please select a project to edit.', 'warning');
+            return;
+        }
+        
+        // Find the project data (simplified find for demonstration)
+        const project = allProjects.find(p => p.ProjectID === currentProjectID) || {};
+        
+        // Populate the form (Ensure your index.html has elements with these IDs)
+        document.getElementById('editProjectID').value = project.ProjectID || '';
+        document.getElementById('editProjectName').value = project.ProjectName || project.Name || '';
+        document.getElementById('editClientName').value = project.ClientName || '';
+        document.getElementById('editProjectLocation').value = project.ProjectLocation || '';
+        document.getElementById('editProjectStartDate').value = project.ProjectStartDate || '';
+        document.getElementById('editProjectDeadline').value = project.ProjectDeadline || '';
+        document.getElementById('editProjectValue').value = project.ProjectValue || project.Budget || 0;
+        document.getElementById('editProjectType').value = project.ProjectType || '';
+        
+        projectEditModal.style.display = 'block';
+    });
+    
+    if (cancelEditBtn) {
+        cancelEditBtn.addEventListener('click', () => {
+            projectEditModal.style.display = 'none';
+        });
+    }
+}
+
+
+// --- 8. EDIT FORM SUBMISSION (PUT Request) ---
+
+if (projectEditForm) {
+    projectEditForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        // Get updated data from the form
+        const updatedData = {
+            ProjectID: document.getElementById('editProjectID').value,
+            ProjectName: document.getElementById('editProjectName').value,
+            ClientName: document.getElementById('editClientName').value,
+            ProjectLocation: document.getElementById('editProjectLocation').value,
+            ProjectStartDate: document.getElementById('editProjectStartDate').value,
+            ProjectDeadline: document.getElementById('editProjectDeadline').value,
+            ProjectValue: parseFloat(document.getElementById('editProjectValue').value),
+            ProjectType: document.getElementById('editProjectType').value,
+        };
+
+        const result = await sendDataToSheet('Projects', 'PUT', updatedData);
+
+        if (result.status === 'success') {
+            projectEditModal.style.display = 'none';
+            await loadProjects(); // Reload projects and dashboard
+            showMessageBox(`Project ${updatedData.ProjectName} updated successfully!`, 'success');
+        } else {
+            showMessageBox(`Failed to update project: ${result.message}`, 'error');
+        }
+    });
+}
+
+
+// --- 9. INITIALIZATION (Must be the last line) ---
 window.onload = loadProjects;
