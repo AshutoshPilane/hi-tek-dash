@@ -486,9 +486,33 @@ if (newProjectForm) {
             Status: 'Pending',
         }));
 
-        const [projectResult, tasksResult] = await Promise.all([
-            sendDataToSheet('Projects', 'POST', projectData), 
-            sendDataToSheet('Tasks', 'POST_BATCH', initialTasks) 
+        // 1. Create the project first
+        const projectResult = await sendDataToSheet('Projects', 'POST', projectData);
+
+        if (projectResult.status !== 'success') {
+             showMessageBox(`Failed to create project: ${projectResult.message}`, 'error');
+             return;
+        }
+
+        // 2. Sequentially create the initial tasks (one POST request for each task)
+        const taskPromises = initialTasks.map(task => 
+            sendDataToSheet('Tasks', 'POST', task)
+        );
+        const taskResults = await Promise.all(taskPromises);
+        
+        // Check if any task failed (optional but recommended)
+        const failedTasks = taskResults.filter(r => r.status !== 'success');
+
+        if (failedTasks.length === 0) {
+            if(newProjectModal) newProjectModal.style.display = 'none';
+            if(newProjectForm) newProjectForm.reset();
+            currentProjectID = newProjectID; 
+            await loadProjects();
+            showMessageBox(`Project ${projectData.ProjectName} created successfully with ${initialTasks.length} initial tasks!`, 'success');
+        } else {
+            // Show a mixed success/error message
+            showMessageBox(`Project created, but ${failedTasks.length} tasks failed to save. Task Error: Check console.`, 'error');
+        }
         ]);
 
         if (projectResult.status === 'success' && tasksResult.status === 'success') {
@@ -748,3 +772,4 @@ if (saveProjectDetailsBtn) {
 // --- 12. INITIALIZATION ---
 
 window.onload = loadProjects;
+
