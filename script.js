@@ -1,5 +1,5 @@
 // =============================================================================
-// script.js: FINAL ROBUST VERSION (Guaranteed Fixes + Full PUT/DELETE Logic)
+// script.js: FINAL ROBUST VERSION (Includes Fixes for all panels + PUT/DELETE)
 // =============================================================================
 
 const SHEET_API_URL = "/api"; 
@@ -72,7 +72,6 @@ async function loadProjects() {
         allProjects = response.data;
         populateProjectSelector(allProjects);
         
-        // Use a project ID preference if available, otherwise select the first one.
         const targetID = document.getElementById('projectSelector').value || allProjects[0].ProjectID;
         currentProjectID = targetID;
         if (projectSelector) projectSelector.value = currentProjectID;
@@ -91,7 +90,6 @@ function populateProjectSelector(projects) {
         projects.forEach(project => {
             const option = document.createElement('option');
             option.value = project.ProjectID;
-            // Assuming your Project sheet has a ProjectName column, or falling back to a general 'Name'
             option.textContent = project.ProjectName || project.Name;
             projectSelector.appendChild(option);
         });
@@ -128,7 +126,7 @@ async function updateDashboard(project) {
     renderTaskList(tasks);
     renderExpenses(expenses);
     updateKPIs(project, tasks, expenses);
-    loadEditForm(project); // Load current project data into the edit form
+    loadEditForm(project); 
 }
 
 
@@ -248,31 +246,34 @@ function updateKPIs(project, tasks, expenses) {
 }
 
 
-// --- 5. PROJECT EDIT & DELETE LOGIC (NEW IMPLEMENTATION) ---
+// --- 5. PROJECT EDIT & DELETE LOGIC ---
 
 const projectDetailsDisplay = document.getElementById('projectDetailsDisplay');
 const projectDetailsEdit = document.getElementById('projectDetailsEdit');
 const editProjectDetailsBtn = document.getElementById('editProjectDetailsBtn');
 const saveProjectDetailsBtn = document.getElementById('saveProjectDetailsBtn');
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
+const cancelEditBtn = document.getElementById('cancelEditBtn'); // New reference for the cancel button
 
 
 function loadEditForm(project) {
     if (!project) return;
-    // CRITICAL: Ensure input IDs match your index.html (e.g., input-name vs editProjectName)
-    document.getElementById('editProjectID').value = project.ProjectID || '';
-    document.getElementById('editProjectName').value = project.ProjectName || project.Name || '';
-    document.getElementById('editClientName').value = project.ClientName || ''; 
-    document.getElementById('editProjectLocation').value = project.ProjectLocation || '';
-    document.getElementById('editProjectStartDate').value = project.ProjectStartDate || '';
-    document.getElementById('editProjectDeadline').value = project.ProjectDeadline || '';
-    document.getElementById('editProjectValue').value = parseFloat(project.ProjectValue || 0);
-    document.getElementById('editProjectType').value = project.ProjectType || '';
-    // Optional fields
-    // document.getElementById('editContractor').value = project.Contractor || '';
-    // document.getElementById('editEngineers').value = project.Engineers || '';
-    // document.getElementById('editContact1').value = project.Contact1 || '';
-    // document.getElementById('editContact2').value = project.Contact2 || '';
+    
+    // Helper function to safely set input values without crashing on missing elements
+    const setInputValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+    };
+
+    // CRITICAL FIELDS
+    setInputValue('editProjectID', project.ProjectID || ''); 
+    setInputValue('editProjectName', project.ProjectName || project.Name || '');
+    setInputValue('editClientName', project.ClientName || ''); 
+    setInputValue('editProjectLocation', project.ProjectLocation || '');
+    setInputValue('editProjectStartDate', project.ProjectStartDate || '');
+    setInputValue('editProjectDeadline', project.ProjectDeadline || '');
+    setInputValue('editProjectValue', parseFloat(project.ProjectValue || 0));
+    setInputValue('editProjectType', project.ProjectType || '');
 }
 
 
@@ -283,7 +284,6 @@ if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
             showMessageBox('Please select a project to edit.', 'alert');
             return;
         }
-        // Load data on click to ensure it's fresh
         const project = allProjects.find(p => p.ProjectID === currentProjectID);
         loadEditForm(project);
         
@@ -292,10 +292,19 @@ if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     });
 }
 
+// --- CANCEL BUTTON: TOGGLE BACK TO VIEW MODE ---
+if (cancelEditBtn && projectDetailsDisplay && projectDetailsEdit) {
+    cancelEditBtn.addEventListener('click', () => {
+        projectDetailsDisplay.style.display = 'block';
+        projectDetailsEdit.style.display = 'none';
+        showMessageBox('Project details edit cancelled.', 'info');
+    });
+}
+
+
 // --- SAVE BUTTON: IMPLEMENT PUT LOGIC ---
 if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     saveProjectDetailsBtn.addEventListener('click', async () => {
-        // Find the form container element (assuming projectDetailsEdit holds the form or is the form)
         const form = document.getElementById('projectEditForm'); 
         if (!form) return;
         
@@ -306,7 +315,6 @@ if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
             ProjectLocation: document.getElementById('editProjectLocation').value,
             ProjectStartDate: document.getElementById('editProjectStartDate').value,
             ProjectDeadline: document.getElementById('editProjectDeadline').value,
-            // Ensure ProjectValue is sent as a number if possible
             ProjectValue: parseFloat(document.getElementById('editProjectValue').value) || 0,
             ProjectType: document.getElementById('editProjectType').value,
         };
@@ -339,8 +347,8 @@ if (deleteProjectBtn) {
             
             if (result.status === 'success') {
                 showMessageBox(`Project ${projectName} deleted successfully.`, 'success');
-                currentProjectID = null; // Clear selection
-                await loadProjects(); // Reload projects list
+                currentProjectID = null; 
+                await loadProjects(); 
             } else {
                 showMessageBox(`Failed to delete project: ${result.message}`, 'error');
             }
@@ -349,7 +357,7 @@ if (deleteProjectBtn) {
 }
 
 
-// --- 6. FORM SUBMISSION JUMP FIXES (Already confirmed working) ---
+// --- 6. FORM SUBMISSION JUMP FIXES (Prevents page reload) ---
 
 document.getElementById('recordDispatchForm')?.addEventListener('submit', (e) => { e.preventDefault(); showMessageBox('Material Dispatch captured. (POST logic required)', 'info'); });
 document.getElementById('expenseEntryForm')?.addEventListener('submit', (e) => { e.preventDefault(); showMessageBox('Expense captured. (POST logic required)', 'info'); });
