@@ -2,18 +2,16 @@
 // script.js: FINAL OPERATIONAL VERSION (Array Check & ID Mismatch Fix)
 // =============================================================================
 
-// 🎯 CRITICAL: USING THE LOCAL PROXY PATH (/api)
 const SHEET_API_URL = "/api"; 
-
 let currentProjectID = null; 
 let allProjects = [];
 
-// --- 1. DUMMY FUNCTION for error/success messages (Required for error-free execution) ---
+// --- 1. DUMMY FUNCTION for error/success messages ---
 function showMessageBox(message, type) {
     console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
 }
 
-// --- 2. THE HI TEK 23-STEP WORKFLOW LIST ---
+// --- 2. THE HI TEK 23-STEP WORKFLOW LIST (Required for task initialization/count) ---
 const HI_TEK_TASKS_MAP = [
     { Name: '1. Understanding the System', Responsible: 'Project Manager' },
     { Name: '2. Identifying Scope', Responsible: 'Site Engineer/Project coordinator' },
@@ -51,7 +49,6 @@ async function sendDataToSheet(sheetName, method, data = {}) {
         payload = { ...payload, ...data };
     }
     
-    // Always use POST to call the Apps Script proxy
     const fetchMethod = 'POST'; 
 
     try {
@@ -96,7 +93,7 @@ if (projectSelector) {
                 await updateDashboard(selectedProject);
             }
         } else {
-            updateDashboard(null);
+            await updateDashboard(null); // Clear dashboard if selection is cleared
         }
     });
 }
@@ -107,7 +104,7 @@ async function loadProjects() {
     
     const response = await sendDataToSheet('Projects', 'GET', {});
 
-    if (response.status === 'success' && response.data && response.data.length > 0) {
+    if (response.status === 'success' && response.data && Array.isArray(response.data) && response.data.length > 0) {
         allProjects = response.data;
         populateProjectSelector(allProjects);
         
@@ -121,7 +118,7 @@ async function loadProjects() {
 
     } else {
         if (projectSelector) projectSelector.innerHTML = '<option value="">No Projects Found</option>';
-        updateDashboard(null);
+        await updateDashboard(null);
     }
 }
 
@@ -131,7 +128,7 @@ function populateProjectSelector(projects) {
         projects.forEach(project => {
             const option = document.createElement('option');
             option.value = project.ProjectID;
-            option.textContent = project.ProjectName;
+            option.textContent = project.ProjectName || project.Name;
             projectSelector.appendChild(option);
         });
     }
@@ -141,20 +138,14 @@ function populateProjectSelector(projects) {
 // --- 5. DASHBOARD UPDATE (Master Controller) ---
 
 async function updateDashboard(project) {
-    const detailSpans = document.querySelectorAll('#projectDetailsDisplay .detail-list span');
-    const kpiValues = document.querySelectorAll('.kpi-container .value');
-
     if (!project) {
+        // ... (Clearing logic for N/A) ...
         currentProjectID = null;
         if(currentProjectNameDisplay) currentProjectNameDisplay.textContent = 'Select a Project';
-        
-        detailSpans.forEach(el => el.textContent = 'N/A');
-        kpiValues.forEach(el => el.textContent = 'N/A');
-
-        const taskTableBody = document.getElementById('taskTableBody');
-        if(taskTableBody) taskTableBody.innerHTML = '<tr><td colspan="5">No tasks loaded...</td></tr>';
-        const recentExpensesList = document.getElementById('recentExpensesList');
-        if(recentExpensesList) recentExpensesList.innerHTML = '<li class="placeholder">No expenses loaded...</li>';
+        renderProjectDetails(null);
+        updateKPIs(null, [], []);
+        renderTaskList([]);
+        renderExpenses([]);
         return;
     }
 
@@ -190,15 +181,30 @@ function renderProjectDetails(project) {
         const el = document.getElementById(id);
         if (el) el.textContent = value;
     };
+    
+    // This handles the "NA is being displayed" issue by ensuring we don't crash
+    if (!project) {
+        update('display-name', 'N/A');
+        update('display-start-date', 'N/A');
+        update('display-deadline', 'N/A');
+        update('display-location', 'N/A');
+        update('display-amount', 'N/A');
+        update('display-contractor', 'N/A');
+        update('display-engineers', 'N/A');
+        update('display-contact1', 'N/A');
+        update('display-contact2', 'N/A');
+        return;
+    }
 
-    const projectValue = parseFloat(project.ProjectValue) || 0;
+    const projectValue = parseFloat(project.ProjectValue || 0);
     const formattedValue = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(projectValue);
 
+    // CRITICAL: Mapped from JS logic to YOUR HTML IDs
     update('display-name', project.ProjectName || 'N/A');
     update('display-start-date', project.ProjectStartDate || 'N/A');
     update('display-deadline', project.ProjectDeadline || 'N/A');
     update('display-location', project.ProjectLocation || 'N/A');
-    update('display-amount', formattedValue);
+    update('display-amount', formattedValue); // Your HTML uses 'Amount'
     update('display-contractor', project.Contractor || 'N/A');
     update('display-engineers', project.Engineers || 'N/A');
     update('display-contact1', project.Contact1 || 'N/A');
@@ -206,7 +212,7 @@ function renderProjectDetails(project) {
 }
 
 function renderTaskList(tasks) {
-    // This function is now protected against the TypeError.
+    // CRITICAL: Target the <tbody> element
     const taskContainer = document.getElementById('taskTableBody'); 
     
     if (!taskContainer) {
@@ -214,15 +220,17 @@ function renderTaskList(tasks) {
         return;
     }
     
-    taskContainer.innerHTML = ''; 
+    taskContainer.innerHTML = ''; // Clear existing content
     
     if (tasks.length === 0) {
+        // Placeholder row must span 5 columns
         taskContainer.innerHTML = '<tr><td colspan="5">No tasks loaded...</td></tr>';
         return;
     }
 
     tasks.forEach(task => { // This line is now safe because 'tasks' is guaranteed to be an array.
         const tr = document.createElement('tr');
+        // Task, Responsible, Progress, Due Date, Status (matching your table headers)
         tr.innerHTML = `
             <td>${task.TaskName || 'N/A'}</td>
             <td>${task.Responsible || 'N/A'}</td>
@@ -261,6 +269,22 @@ function renderExpenses(expenses) {
 }
 
 function updateKPIs(project, tasks, expenses) {
+    // Helper function to safely update
+    const update = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+    
+    if (!project) {
+        update('kpi-days-spent', 'N/A');
+        update('kpi-days-left', 'N/A');
+        update('kpi-progress', '0%');
+        update('kpi-material-progress', '0% Dispatched');
+        update('kpi-work-order', '₹ 0');
+        update('kpi-total-expenses', '₹ 0');
+        return;
+    }
+    
     const projectValue = parseFloat(project.ProjectValue) || 0;
     const projectStart = project.ProjectStartDate;
     const projectDeadline = project.ProjectDeadline;
@@ -281,24 +305,32 @@ function updateKPIs(project, tasks, expenses) {
     const currencyFormatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 
     // Apply to DOM (Fixed Mismatches)
-    document.getElementById('kpi-days-spent').textContent = daysSpent;
-    document.getElementById('kpi-days-left').textContent = daysLeft;
-    document.getElementById('kpi-progress').textContent = `${taskProgress}%`;
-    document.getElementById('kpi-material-progress').textContent = '0% Dispatched';
-    document.getElementById('kpi-work-order').textContent = currencyFormatter.format(projectValue);
-    document.getElementById('kpi-total-expenses').textContent = currencyFormatter.format(totalExpenses);
+    update('kpi-days-spent', daysSpent);
+    update('kpi-days-left', daysLeft);
+    update('kpi-progress', `${taskProgress}%`);
+    update('kpi-material-progress', '0% Dispatched');
+    update('kpi-work-order', currencyFormatter.format(projectValue));
+    update('kpi-total-expenses', currencyFormatter.format(totalExpenses));
 }
 
 
-// --- 7. PROJECT ADDITION & MODAL LOGIC (Assuming modal structure exists) ---
+// --- 7. PROJECT ADDITION & MODAL LOGIC (New Project) ---
 
-const newProjectModal = document.getElementById('newProjectModal');
-const newProjectForm = document.getElementById('newProjectForm');
+const addProjectBtn = document.getElementById('addProjectBtn');
+const newProjectModal = document.getElementById('newProjectModal'); 
+const newProjectForm = document.getElementById('newProjectForm'); 
+const closeNewProjectBtn = newProjectModal ? newProjectModal.querySelector('.close-button') : null;
 
-// ... (Modal/Form logic retained from previous step) ...
+if (addProjectBtn && newProjectModal && closeNewProjectBtn) {
+    addProjectBtn.addEventListener('click', () => { newProjectModal.style.display = 'block'; });
+    closeNewProjectBtn.addEventListener('click', () => { newProjectModal.style.display = 'none'; });
+    window.addEventListener('click', (event) => {
+        if (event.target === newProjectModal) { newProjectModal.style.display = 'none'; }
+    });
+}
 
 
-// --- 8. PROJECT EDIT LOGIC (Custom Toggle Logic for your HTML Structure) ---
+// --- 8. PROJECT EDIT LOGIC (Toggling View/Edit) ---
 
 const editProjectDetailsBtn = document.getElementById('editProjectDetailsBtn');
 const projectDetailsDisplay = document.getElementById('projectDetailsDisplay');
@@ -312,36 +344,35 @@ if (editProjectDetailsBtn) {
             return;
         }
         
-        // This is the fix for "NA being displayed" after attempting to edit
+        // FIX for "project details panel cannot be edited"
         if (projectDetailsDisplay && projectDetailsEdit) {
             projectDetailsDisplay.style.display = 'none';
             projectDetailsEdit.style.display = 'block';
+            showMessageBox('Edit panel toggled.', 'info');
         }
-        showMessageBox('Edit panel toggled.', 'info');
     });
 }
 
 if (saveProjectDetailsBtn) {
     saveProjectDetailsBtn.addEventListener('click', async () => {
-        // PUT request logic would go here
+        // Placeholder for PUT request logic
         
         if (projectDetailsDisplay && projectDetailsEdit) {
             projectDetailsDisplay.style.display = 'block';
             projectDetailsEdit.style.display = 'none';
         }
-        showMessageBox('Project details save attempted.', 'info');
+        showMessageBox('Project details save attempted. (PUT logic required)', 'info');
     });
 }
 
 
-// --- 9. FORM SUBMISSION JUMP FIXES ---
+// --- 9. FORM SUBMISSION JUMP FIXES (Prevents page reload on button clicks) ---
 
-// FIX: Prevent form jumps by preventing default submission actions
 const recordDispatchForm = document.getElementById('recordDispatchForm');
 if (recordDispatchForm) {
     recordDispatchForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        showMessageBox('Material Dispatch form submission captured. Logic needs to be implemented.', 'info');
+        showMessageBox('Material Dispatch form submission captured. (POST logic required)', 'info');
     });
 }
 
@@ -349,7 +380,7 @@ const expenseEntryForm = document.getElementById('expenseEntryForm');
 if (expenseEntryForm) {
     expenseEntryForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        showMessageBox('Expense form submission captured. Logic needs to be implemented.', 'info');
+        showMessageBox('Expense form submission captured. (POST logic required)', 'info');
     });
 }
 
@@ -357,7 +388,7 @@ const updateTaskForm = document.getElementById('updateTaskForm');
 if (updateTaskForm) {
     updateTaskForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        showMessageBox('Task Update form submission captured. Logic needs to be implemented.', 'info');
+        showMessageBox('Task Update form submission captured. (PUT logic required)', 'info');
     });
 }
 
