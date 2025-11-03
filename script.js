@@ -164,13 +164,21 @@ function renderProjectDetails(project) {
 
 // --- PROJECT ADDITION LOGIC (As requested by "not able to add projects") ---
 // --- PROJECT ADDITION LOGIC (Restore Modal Functionality) ---
+// --- PROJECT ADDITION LOGIC (Restore Modal Functionality) ---
 
+// 1. Declare and initialize all elements first
 const newProjectModal = document.getElementById('newProjectModal');
 const addProjectBtn = document.getElementById('addProjectBtn');
-const closeButton = newProjectModal ? newProjectModal.querySelector('.close-button') : null;
 const newProjectForm = document.getElementById('newProjectForm');
 
-// 1. Show/Hide Modal Logic
+// Safely get the close button, which might not exist if the modal is missing
+const closeButton = newProjectModal ? newProjectModal.querySelector('.close-button') : null; 
+
+// Global variable to temporarily hold the ID of the project just created (KEEP THIS AT THE TOP OF SCRIPT.JS)
+// let projectIDToSelect = null; 
+
+
+// 2. Show/Hide Modal Logic
 if (addProjectBtn && newProjectModal && closeButton) {
     // Show modal
     addProjectBtn.addEventListener('click', () => {
@@ -191,12 +199,13 @@ if (addProjectBtn && newProjectModal && closeButton) {
 }
 
 
-// 2. Form Submission (POST Request)
+// 3. Form Submission (POST Request)
 if (newProjectForm) {
     newProjectForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const newProjectData = {
+            // Note: The new ProjectID must be unique and is essential for task linking
             ProjectID: document.getElementById('newProjectID').value,
             ProjectName: document.getElementById('newProjectName').value,
             ClientName: document.getElementById('newClientName').value,
@@ -206,6 +215,12 @@ if (newProjectForm) {
             ProjectValue: parseFloat(document.getElementById('newProjectValue').value),
             ProjectType: document.getElementById('newProjectType').value,
         };
+        
+        // Validation check
+        if (!newProjectData.ProjectID || !newProjectData.ProjectName) {
+            showMessageBox('Project ID and Name are required.', 'error');
+            return;
+        }
 
         // Send POST request to the 'Projects' sheet
         const result = await sendDataToSheet('Projects', 'POST', newProjectData);
@@ -214,6 +229,11 @@ if (newProjectForm) {
             showMessageBox(`Project "${newProjectData.ProjectName}" created successfully!`, 'success');
             newProjectForm.reset();
             newProjectModal.style.display = 'none';
+            
+            // Set the global variable so loadProjects selects the new project
+            // Ensure you defined 'let projectIDToSelect = null;' at the very top of script.js
+            projectIDToSelect = newProjectData.ProjectID; 
+            
             await loadProjects(); // Reload the project list and dashboard
         } else {
             showMessageBox(`Failed to create project: ${result.message}`, 'error');
@@ -224,5 +244,6 @@ if (newProjectForm) {
 
 // --- INITIALIZATION ---
 window.onload = loadProjects;
+
 
 
