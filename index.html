@@ -68,36 +68,54 @@
                 <button id="editProjectDetailsBtn" class="button-secondary" style="margin-top: 15px;">Edit Details</button>
             </div>
             
-            <div id="projectDetailsEdit" style="display: none;">
-                <label for="input-name">Name:</label>
-                <input type="text" id="input-name">
-                
-                <label for="input-start-date">Start Date:</label>
-                <input type="date" id="input-start-date">
-                
-                <label for="input-deadline">Deadline:</label>
-                <input type="date" id="input-deadline">
-                
-                <label for="input-location">Location:</label>
-                <input type="text" id="input-location">
-                
-                <label for="input-amount">Amount (INR):</label>
-                <input type="number" id="input-amount" min="0">
-                
-                <label for="input-contractor">Contractor:</label>
-                <input type="text" id="input-contractor">
-                
-                <label for="input-engineers">Engineers:</label>
-                <input type="text" id="input-engineers">
-                
-                <label for="input-contact1">Contact 1:</label>
-                <input type="text" id="input-contact1">
-                
-                <label for="input-contact2">Contact 2:</label>
-                <input type="text" id="input-contact2">
-                
-                <button id="saveProjectDetailsBtn" class="button-primary" style="margin-top: 15px;">Save Details</button>
-            </div>
+           <div id="projectDetailsEdit" style="display: none;">
+    <form id="projectEditForm">
+        <input type="hidden" id="editProjectID">
+
+        <label for="editProjectName">Name:</label>
+        <input type="text" id="editProjectName">
+        
+        <label for="editClientName">Client Name:</label>
+        <input type="text" id="editClientName"> 
+
+        <label for="editProjectStartDate">Start Date:</label>
+        <input type="date" id="editProjectStartDate">
+        
+        <label for="editProjectDeadline">Deadline:</label>
+        <input type="date" id="editProjectDeadline">
+        
+        <label for="editProjectLocation">Location:</label>
+        <input type="text" id="editProjectLocation">
+        
+        <label for="editProjectValue">Amount (INR):</label>
+        <input type="number" id="editProjectValue" min="0">
+        
+        <label for="editProjectType">Project Type:</label>
+        <select id="editProjectType">
+            <option value="Residential">Residential</option>
+            <option value="Commercial">Commercial</option>
+            <option value="Infrastructure">Infrastructure</option>
+            <option value="Maintenance">Maintenance</option>
+        </select>
+        
+        <label for="input-contractor">Contractor:</label>
+        <input type="text" id="input-contractor">
+        
+        <label for="input-engineers">Engineers:</label>
+        <input type="text" id="input-engineers">
+        
+        <label for="input-contact1">Contact 1:</label>
+        <input type="text" id="input-contact1">
+        
+        <label for="input-contact2">Contact 2:</label>
+        <input type="text" id="input-contact2">
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button type="button" id="saveProjectDetailsBtn" class="button-primary" style="flex-grow: 1;">Save Changes</button>
+            <button type="button" id="cancelEditBtn" class="button-secondary" style="flex-grow: 1;">Cancel</button>
+        </div>
+    </form>
+</div>
         </div>
 
         <div class="panel">
@@ -265,3 +283,4 @@
 </body>
 
 </html>
+
