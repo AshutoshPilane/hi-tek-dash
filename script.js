@@ -1,5 +1,5 @@
 // =============================================================================
-// script.js: FINAL ROBUST VERSION (Guaranteed ProjectID for PUT/DELETE)
+// script.js: FINAL DEBUGGING VERSION (For ProjectID not provided error)
 // =============================================================================
 
 const SHEET_API_URL = "/api"; 
@@ -49,7 +49,7 @@ function calculateDaysDifference(startDateString, endDateString) {
 }
 
 
-// --- 2. PROJECT LOADING AND SELECTION ---
+// --- 2. PROJECT LOADING AND SELECTION (Omitted for brevity) ---
 
 const projectSelector = document.getElementById('projectSelector');
 const currentProjectNameDisplay = document.getElementById('currentProjectName');
@@ -130,7 +130,7 @@ async function updateDashboard(project) {
 }
 
 
-// --- 4. DATA RENDERING FUNCTIONS (Omitted for brevity, assumed correct) ---
+// --- 4. DATA RENDERING FUNCTIONS (Omitted for brevity) ---
 
 function renderProjectDetails(project) {
     const update = (id, value) => {
@@ -264,8 +264,7 @@ function loadEditForm(project) {
     };
 
     // CRITICAL: Ensure the ProjectID value from the data is loaded into the hidden input.
-    // The key 'ProjectID' MUST match the column header in your 'Projects' Google Sheet.
-    setInputValue('editProjectID', project.ProjectID || project.ID || ''); 
+    setInputValue('editProjectID', project.ProjectID || currentProjectID || ''); 
     
     setInputValue('editProjectName', project.ProjectName || project.Name || '');
     setInputValue('editClientName', project.ClientName || ''); 
@@ -287,6 +286,9 @@ if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
         const project = allProjects.find(p => p.ProjectID === currentProjectID);
         loadEditForm(project);
         
+        // 🎯 DEBUG LOG 1: Check what was set to the hidden input
+        console.log("DEBUG 1 (Edit Click): ID set to hidden input: " + document.getElementById('editProjectID').value);
+        
         projectDetailsDisplay.style.display = 'none';
         projectDetailsEdit.style.display = 'block';
     });
@@ -306,9 +308,11 @@ if (cancelEditBtn && projectDetailsDisplay && projectDetailsEdit) {
 if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     saveProjectDetailsBtn.addEventListener('click', async () => {
         
-        // 🎯 CRITICAL CHECK: Ensure ProjectID is not empty before proceeding
         const projectIDToSave = document.getElementById('editProjectID').value;
         
+        // 🎯 DEBUG LOG 2: Check what will be sent to the server
+        console.log("DEBUG 2 (Save Click): ID being sent to PUT: " + projectIDToSave);
+
         if (!projectIDToSave) {
             showMessageBox('CRITICAL ERROR: Project ID is missing from the edit form. Cannot save.', 'error');
             projectDetailsDisplay.style.display = 'block';
@@ -317,7 +321,7 @@ if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
         }
 
         const updatedData = {
-            ProjectID: projectIDToSave, // Guaranteed to be non-empty here
+            ProjectID: projectIDToSave,
             ProjectName: document.getElementById('editProjectName').value,
             ClientName: document.getElementById('editClientName').value,
             ProjectLocation: document.getElementById('editProjectLocation').value,
@@ -326,7 +330,7 @@ if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
             ProjectValue: parseFloat(document.getElementById('editProjectValue').value) || 0,
             ProjectType: document.getElementById('editProjectType').value,
         };
-
+        
         const result = await sendDataToSheet('Projects', 'PUT', updatedData);
 
         if (result.status === 'success') {
@@ -340,7 +344,7 @@ if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     });
 }
 
-// --- DELETE BUTTON: IMPLEMENT DELETE LOGIC (Omitted for brevity, assumed correct) ---
+// --- DELETE BUTTON: IMPLEMENT DELETE LOGIC (Omitted for brevity) ---
 if (deleteProjectBtn) {
     deleteProjectBtn.addEventListener('click', async () => {
         if (!currentProjectID) {
@@ -365,7 +369,7 @@ if (deleteProjectBtn) {
 }
 
 
-// --- 6. FORM SUBMISSION JUMP FIXES ---
+// --- 6. FORM SUBMISSION JUMP FIXES (Omitted for brevity) ---
 
 document.getElementById('recordDispatchForm')?.addEventListener('submit', (e) => { e.preventDefault(); showMessageBox('Material Dispatch captured. (POST logic required)', 'info'); });
 document.getElementById('expenseEntryForm')?.addEventListener('submit', (e) => { e.preventDefault(); showMessageBox('Expense captured. (POST logic required)', 'info'); });
