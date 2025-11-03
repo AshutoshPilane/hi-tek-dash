@@ -1,5 +1,5 @@
 // ==============================================================================
-// script.js: FINAL OPERATIONAL VERSION (UI Persistence Fix)
+// script.js: FINAL OPERATIONAL VERSION (Guaranteed UI Selection)
 // ==============================================================================
 
 const SHEET_API_URL = "/api"; 
@@ -115,7 +115,7 @@ async function loadProjects() {
     if (response.status === 'success' && response.data && response.data.length > 0) {
         allProjects = response.data;
         
-        // --- STEP 1: POPULATE DROPDOWN (CRITICAL FIX) ---
+        // --- STEP 1: POPULATE DROPDOWN ---
         populateProjectSelector(allProjects);
         
         // --- STEP 2: DETERMINE TARGET ID ---
@@ -126,9 +126,23 @@ async function loadProjects() {
              targetID = allProjects[0].ProjectID; // Fallback to first project
         }
 
-        // --- STEP 3: APPLY SELECTION AND STATE ---
+        // --- STEP 3: APPLY SELECTION AND STATE (CRITICAL UI FIX) ---
         currentProjectID = targetID;
-        if (projectSelector) projectSelector.value = currentProjectID;
+        
+        if (projectSelector) {
+            // Set the value
+            projectSelector.value = currentProjectID;
+            
+            // 🎯 CRITICAL FIX: Explicitly ensure the option is marked as selected 
+            // in case the browser is stubborn about setting the overall value.
+            const targetOption = Array.from(projectSelector.options).find(opt => opt.value === currentProjectID);
+            if (targetOption) {
+                targetOption.selected = true;
+                console.log(`DEBUG LOAD: Successfully selected option ${currentProjectID} in UI.`);
+            } else {
+                 console.error(`DEBUG LOAD: Failed to find or select option for ID: ${currentProjectID}`);
+            }
+        }
         
         console.log(`DEBUG LOAD: Target Project ID set: ${currentProjectID}`);
         
@@ -152,9 +166,6 @@ function populateProjectSelector(projects) {
             return;
         }
 
-        // 🎯 FIX: Do NOT add a placeholder option if projects exist.
-        // This ensures a valid project ID is available for selection immediately.
-        
         projects.forEach(project => {
             const option = document.createElement('option');
             option.value = project.ProjectID;
@@ -200,7 +211,6 @@ async function updateDashboard(project) {
 
 
 // --- 5. DATA RENDERING FUNCTIONS (Omitted for brevity) ---
-
 function renderProjectDetails(project) {
     const update = (id, value) => {
         const el = document.getElementById(id);
