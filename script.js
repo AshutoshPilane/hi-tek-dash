@@ -1,19 +1,32 @@
 // =============================================================================
-// script.js: FINAL ROBUST & SIMPLE DATA FETCH VERSION
+// script.js: FINAL ROBUST & ERROR-FREE OPERATIONAL VERSION
 // =============================================================================
 
 const SHEET_API_URL = "/api"; 
+
+// --- CRITICAL GLOBAL VARIABLE DECLARATIONS (MUST BE AT THE TOP) ---
 let currentProjectID = null; 
 let allProjects = [];
+let projectIDToSelect = null; // Used to select the new project after creation
 
-// --- UTILITY (CRITICAL API FIX) ---
+// DOM Element References
+const projectSelector = document.getElementById('projectSelector');
+const currentProjectName = document.getElementById('currentProjectName');
+const newProjectModal = document.getElementById('newProjectModal');
+const addProjectBtn = document.getElementById('addProjectBtn');
+const newProjectForm = document.getElementById('newProjectForm');
+const closeButton = newProjectModal ? newProjectModal.querySelector('.close-button') : null; 
+
+
+// --- UTILITY (API Compatibility & Messaging) ---
+
 function showMessageBox(message, type) {
     console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
-    // You can replace this with a simple alert(message); if you prefer
+    // Optional: alert(message);
 }
 
 async function sendDataToSheet(sheetName, method, data = {}) {
-    let payload = { sheetName, method, ...data }; // CRITICAL: Merge data at top level for Apps Script
+    let payload = { sheetName, method, ...data }; // Merge data at top level
 
     try {
         const response = await fetch(SHEET_API_URL, {
@@ -22,7 +35,6 @@ async function sendDataToSheet(sheetName, method, data = {}) {
             body: JSON.stringify(payload),
         });
         
-        // This is necessary because Apps Script often returns text/plain even for JSON
         const text = await response.text(); 
         try {
             return JSON.parse(text);
@@ -37,12 +49,8 @@ async function sendDataToSheet(sheetName, method, data = {}) {
     }
 }
 
-// --- PROJECT & UI MANAGEMENT ---
-const projectSelector = document.getElementById('projectSelector');
-const currentProjectName = document.getElementById('currentProjectName');
 
-// Global variable to temporarily hold the ID of the project just created
-let projectIDToSelect = null; 
+// --- PROJECT & UI MANAGEMENT ---
 
 async function loadProjects() {
     const result = await sendDataToSheet('Projects', 'GET');
@@ -51,8 +59,7 @@ async function loadProjects() {
         allProjects = result.data;
         projectSelector.innerHTML = '<option value="">-- Select Project --</option>';
 
-        // 1. Sort projects by ID descending (assuming higher ID = newer project)
-        allProjects.sort((a, b) => b.ProjectID - a.ProjectID);
+        // 1. Sort projects by ID (or name) if needed, but we'll use a direct target ID.
         
         // Determine which ID to select: use the newly created ID, otherwise use the current ID, otherwise the newest one.
         const targetID = projectIDToSelect || currentProjectID || (allProjects.length > 0 ? allProjects[0].ProjectID : null);
@@ -84,29 +91,6 @@ async function loadProjects() {
     }
 }
 
-// You also need to modify the newProjectForm submission handler:
-if (newProjectForm) {
-    newProjectForm.addEventListener('submit', async (e) => {
-        // ... (existing code to get newProjectData)
-        
-        // Send POST request...
-        const result = await sendDataToSheet('Projects', 'POST', newProjectData);
-
-        if (result.status === 'success') {
-            showMessageBox(`Project "${newProjectData.ProjectName}" created successfully!`, 'success');
-            newProjectForm.reset();
-            newProjectModal.style.display = 'none';
-            
-            // Set the global variable BEFORE reloading
-            projectIDToSelect = newProjectData.ProjectID; 
-            
-            await loadProjects(); // Reload the project list
-        } else {
-           // ...
-        }
-    });
-}
-
 projectSelector.addEventListener('change', async (e) => {
     currentProjectID = e.target.value;
     if (currentProjectID) {
@@ -119,64 +103,64 @@ async function loadDashboardData() {
 
     // 1. Get Project Details
     const projectResult = await sendDataToSheet('Projects', 'GET', { ProjectID: currentProjectID });
-    // Assuming Apps Script returns a single object if ProjectID is specified
     const project = (projectResult.status === 'success' && projectResult.data) ? projectResult.data : null; 
     
-    // 2. Render Data
+    // 2. Get Tasks (Example)
+    const taskResult = await sendDataToSheet('Tasks', 'GET', { ProjectID: currentProjectID });
+    const tasks = (taskResult.status === 'success' && Array.isArray(taskResult.data)) ? taskResult.data : [];
+    
+    // 3. Render Data
     if (project) {
         currentProjectName.textContent = project.ProjectName;
         renderProjectDetails(project);
-        // You would load and render other data (Tasks, Expenses, KPIs) here
+        renderTaskList(tasks); // Ensure this function is defined if you need tasks to display
     } else {
         currentProjectName.textContent = 'Project Not Found';
         renderProjectDetails(null);
     }
 }
 
+
 // --- RENDERING FUNCTIONS (WITH CRITICAL NULL CHECKS) ---
 
 function renderProjectDetails(project) {
-    // If project is null (e.g., failed fetch), clear the display and stop
     if (!project) {
-        document.getElementById('projectDetailsDisplay').innerHTML = '<p>No details available.</p>';
+        const displayDiv = document.getElementById('projectDetailsDisplay');
+        if (displayDiv) displayDiv.innerHTML = '<p>No details available.</p>';
         return;
     }
 
-    // CRITICAL: Check if the element exists before setting textContent!
-    const elements = {
-        name: document.getElementById('display-name'),
-        client: document.getElementById('display-client'),
-        location: document.getElementById('display-location'),
-        startDate: document.getElementById('display-start-date'),
-        deadline: document.getElementById('display-deadline'),
-        value: document.getElementById('display-value'),
-        type: document.getElementById('display-type'),
+    // Safely update DOM elements (the element check prevents the crash)
+    const updateElement = (id, content) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = content;
     };
-    
-    if (elements.name) elements.name.textContent = project.ProjectName || 'N/A';
-    if (elements.client) elements.client.textContent = project.ClientName || 'N/A';
-    if (elements.location) elements.location.textContent = project.ProjectLocation || 'N/A';
-    if (elements.startDate) elements.startDate.textContent = project.ProjectStartDate || 'N/A';
-    if (elements.deadline) elements.deadline.textContent = project.ProjectDeadline || 'N/A';
-    if (elements.value) elements.value.textContent = `INR ${parseFloat(project.ProjectValue || 0).toLocaleString('en-IN')}`;
-    if (elements.type) elements.type.textContent = project.ProjectType || 'N/A';
+
+    updateElement('display-name', project.ProjectName || 'N/A');
+    updateElement('display-client', project.ClientName || 'N/A');
+    updateElement('display-location', project.ProjectLocation || 'N/A');
+    updateElement('display-start-date', project.ProjectStartDate || 'N/A');
+    updateElement('display-deadline', project.ProjectDeadline || 'N/A');
+    updateElement('display-value', `INR ${parseFloat(project.ProjectValue || 0).toLocaleString('en-IN')}`);
+    updateElement('display-type', project.ProjectType || 'N/A');
 }
 
-// --- PROJECT ADDITION LOGIC (As requested by "not able to add projects") ---
-// --- PROJECT ADDITION LOGIC (Restore Modal Functionality) ---
-// --- PROJECT ADDITION LOGIC (Restore Modal Functionality) ---
+function renderTaskList(tasks) {
+    // This is a placeholder. You need to implement this to match your HTML structure.
+    const taskContainer = document.getElementById('taskList') || document.getElementById('taskTableBody');
+    if (!taskContainer) return;
+    
+    taskContainer.innerHTML = '';
+    
+    if (tasks.length === 0) {
+        taskContainer.innerHTML = '<li class="placeholder">No tasks loaded for this project.</li>';
+        return;
+    }
+    // ... (Your actual task rendering logic goes here)
+}
 
-// 1. Declare and initialize all elements first
-const newProjectModal = document.getElementById('newProjectModal');
-const addProjectBtn = document.getElementById('addProjectBtn');
-const newProjectForm = document.getElementById('newProjectForm');
 
-// Safely get the close button, which might not exist if the modal is missing
-const closeButton = newProjectModal ? newProjectModal.querySelector('.close-button') : null; 
-
-// Global variable to temporarily hold the ID of the project just created (KEEP THIS AT THE TOP OF SCRIPT.JS)
-// let projectIDToSelect = null; 
-
+// --- PROJECT ADDITION LOGIC ---
 
 // 2. Show/Hide Modal Logic
 if (addProjectBtn && newProjectModal && closeButton) {
@@ -205,7 +189,6 @@ if (newProjectForm) {
         e.preventDefault();
 
         const newProjectData = {
-            // Note: The new ProjectID must be unique and is essential for task linking
             ProjectID: document.getElementById('newProjectID').value,
             ProjectName: document.getElementById('newProjectName').value,
             ClientName: document.getElementById('newClientName').value,
@@ -216,13 +199,11 @@ if (newProjectForm) {
             ProjectType: document.getElementById('newProjectType').value,
         };
         
-        // Validation check
         if (!newProjectData.ProjectID || !newProjectData.ProjectName) {
             showMessageBox('Project ID and Name are required.', 'error');
             return;
         }
 
-        // Send POST request to the 'Projects' sheet
         const result = await sendDataToSheet('Projects', 'POST', newProjectData);
 
         if (result.status === 'success') {
@@ -230,11 +211,9 @@ if (newProjectForm) {
             newProjectForm.reset();
             newProjectModal.style.display = 'none';
             
-            // Set the global variable so loadProjects selects the new project
-            // Ensure you defined 'let projectIDToSelect = null;' at the very top of script.js
             projectIDToSelect = newProjectData.ProjectID; 
             
-            await loadProjects(); // Reload the project list and dashboard
+            await loadProjects();
         } else {
             showMessageBox(`Failed to create project: ${result.message}`, 'error');
         }
@@ -244,6 +223,3 @@ if (newProjectForm) {
 
 // --- INITIALIZATION ---
 window.onload = loadProjects;
-
-
-
