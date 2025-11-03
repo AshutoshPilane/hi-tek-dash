@@ -1,5 +1,5 @@
 // ==============================================================================
-// script.js: FINAL OPERATIONAL VERSION (Robust State Management)
+// script.js: FINAL OPERATIONAL VERSION (UI Persistence Fix)
 // ==============================================================================
 
 const SHEET_API_URL = "/api"; 
@@ -7,16 +7,15 @@ const SHEET_API_URL = "/api";
 let currentProjectID = null; 
 let allProjects = [];
 
-// Variable to safely hold the ID during editing (Required for edit logic)
 let editingProjectID = null; 
 
-// --- DUMMY FUNCTION for error/success messages (Required for error-free execution) ---
+// --- DUMMY FUNCTION for error/success messages ---
 function showMessageBox(message, type) {
     console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
 }
 
 
-// --- 1. THE HI TEK 23-STEP WORKFLOW LIST ---
+// --- 1. THE HI TEK 23-STEP WORKFLOW LIST (Omitted for brevity) ---
 const HI_TEK_TASKS_MAP = [
     { Name: '1. Understanding the System', Responsible: 'Project Manager' },
     { Name: '2. Identifying Scope', Responsible: 'Site Engineer/Project coordinator' },
@@ -50,13 +49,11 @@ async function sendDataToSheet(sheetName, method, data = {}) {
     let payload = { sheetName, method };
 
     if (['POST', 'PUT', 'DELETE'].includes(method) || method.includes('BATCH')) {
-        // Critical: Nest data under 'data' key for Apps Script mutation
         payload.data = data; 
     } else {
         payload = { ...payload, ...data };
     }
     
-    // Convert GET to POST for Google Apps Script compatibility
     const fetchMethod = 'POST'; 
 
     try {
@@ -86,13 +83,12 @@ function calculateDaysDifference(startDateString, endDateString) {
 }
 
 
-// --- 3. PROJECT LOADING AND SELECTION ---
+// --- 3. PROJECT LOADING AND SELECTION (CRITICAL FIXES HERE) ---
 
 const projectSelector = document.getElementById('projectSelector');
 const currentProjectNameDisplay = document.getElementById('currentProjectName');
 
 if (projectSelector) {
-    // When the user manually changes the selection, update dashboard
     projectSelector.addEventListener('change', async (e) => {
         currentProjectID = e.target.value;
         if (currentProjectID) {
@@ -106,8 +102,10 @@ if (projectSelector) {
 
 
 async function loadProjects() {
-    // 🎯 FIX 1: Preserve the ID before clearing the UI/state
+    // Preserve the current or manually selected ID before any changes
     const savedProjectID = currentProjectID || (projectSelector ? projectSelector.value : null);
+    
+    console.log(`DEBUG LOAD: Saved/Current Project ID before load: ${savedProjectID}`);
 
     allProjects = [];
     if (projectSelector) projectSelector.innerHTML = '<option value="">Loading Projects...</option>';
@@ -116,19 +114,23 @@ async function loadProjects() {
 
     if (response.status === 'success' && response.data && response.data.length > 0) {
         allProjects = response.data;
+        
+        // --- STEP 1: POPULATE DROPDOWN (CRITICAL FIX) ---
         populateProjectSelector(allProjects);
         
-        // 🎯 FIX 2: Determine target ID: use the saved ID, or the first project as a fallback.
+        // --- STEP 2: DETERMINE TARGET ID ---
         let targetID = savedProjectID || allProjects[0].ProjectID;
         
-        // If the saved ID is invalid or deleted, default to the first project.
+        // Ensure the target ID actually exists in the newly loaded list
         if (!allProjects.some(p => p.ProjectID === targetID)) {
-             targetID = allProjects[0].ProjectID;
+             targetID = allProjects[0].ProjectID; // Fallback to first project
         }
 
-        // 🎯 FIX 3: Update the global state and the selector explicitly
+        // --- STEP 3: APPLY SELECTION AND STATE ---
         currentProjectID = targetID;
         if (projectSelector) projectSelector.value = currentProjectID;
+        
+        console.log(`DEBUG LOAD: Target Project ID set: ${currentProjectID}`);
         
         const initialProject = allProjects.find(p => p.ProjectID === currentProjectID);
         if (initialProject) {
@@ -143,7 +145,16 @@ async function loadProjects() {
 
 function populateProjectSelector(projects) {
     if (projectSelector) {
-        projectSelector.innerHTML = '<option value="">-- Select Project --</option>';
+        projectSelector.innerHTML = ''; // Clear all options
+        
+        if (projects.length === 0) {
+            projectSelector.innerHTML = '<option value="">No Projects Found</option>';
+            return;
+        }
+
+        // 🎯 FIX: Do NOT add a placeholder option if projects exist.
+        // This ensures a valid project ID is available for selection immediately.
+        
         projects.forEach(project => {
             const option = document.createElement('option');
             option.value = project.ProjectID;
@@ -160,7 +171,6 @@ async function updateDashboard(project) {
     if (!project) {
         currentProjectID = null;
         if(currentProjectNameDisplay) currentProjectNameDisplay.textContent = 'Select a Project';
-        // Reset logic for all panels...
         return;
     }
 
@@ -226,7 +236,6 @@ function populateTaskDropdown(tasks) {
         selector.appendChild(option);
     });
 }
-
 
 function renderTaskList(tasks) {
     const taskContainer = document.getElementById('taskTableBody'); 
@@ -330,7 +339,6 @@ function updateKPIs(project, tasks, materials, expenses) {
     const projectStart = project.ProjectStartDate;
     const projectDeadline = project.ProjectDeadline;
 
-    // Time KPIs
     const today = new Date().toISOString().split('T')[0];
     let daysSpent = 'N/A', daysLeft = 'N/A';
     
@@ -346,20 +354,16 @@ function updateKPIs(project, tasks, materials, expenses) {
         }
     }
 
-    // Task KPIs
     const completedTasks = tasks.filter(t => (parseFloat(t.Progress) || 0) === 100).length;
     const totalTasks = tasks.length;
     const taskProgressPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
     
-    // Material KPIs
     const totalRequiredMaterial = materials.reduce((sum, m) => sum + (parseFloat(m.RequiredQuantity) || 0), 0);
     const totalDispatchedMaterial = materials.reduce((sum, m) => sum + (parseFloat(m.DispatchedQuantity) || 0), 0);
     const materialProgress = totalRequiredMaterial > 0 ? Math.round((totalDispatchedMaterial / totalRequiredMaterial) * 100) : 0;
 
-    // Expense KPIs
     const totalExpenses = expenses.reduce((sum, expense) => sum + (parseFloat(expense.Amount) || 0), 0);
     
-    // Formatting
     const currencyFormatter = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' });
 
     update('kpi-days-spent', daysSpent);
@@ -382,7 +386,6 @@ if (updateTaskForm) {
         const progress = document.getElementById('taskProgress').value;
         const dueDate = document.getElementById('taskDue').value;
         
-        // 🎯 FIX: Use a safe Project ID by falling back to the selector value
         const projectID = currentProjectID || projectSelector.value;
         
         if (!projectID || !taskID) {
@@ -391,7 +394,7 @@ if (updateTaskForm) {
         }
 
         const updatePayload = {
-            ProjectID: projectID, // Guaranteed to be non-null
+            ProjectID: projectID,
             TaskID: taskID,
             Progress: progress,
             DueDate: dueDate,
@@ -402,7 +405,6 @@ if (updateTaskForm) {
 
         if (result.status === 'success') {
             updateTaskForm.reset();
-            // Reload projects to update all KPIs and lists
             await loadProjects(); 
             showMessageBox(`Task ${taskID} progress updated to ${progress}%.`, 'success');
         } else {
@@ -412,8 +414,7 @@ if (updateTaskForm) {
 }
 
 
-// --- 7. NEW PROJECT CREATION (Omitted for brevity) ---
-// ... (The new project logic is unchanged but relies on the improved loadProjects)
+// --- 7. NEW PROJECT CREATION ---
 
 const addProjectBtn = document.getElementById('addProjectBtn');
 const newProjectModal = document.getElementById('newProjectModal');
@@ -483,10 +484,8 @@ if (newProjectForm) {
         if (projectResult.status === 'success' && tasksResult.status === 'success') {
             if(newProjectModal) newProjectModal.style.display = 'none';
             if(newProjectForm) newProjectForm.reset();
-            // After successful creation, reload and auto-select the new project
+            currentProjectID = newProjectID; // Set new project as current
             await loadProjects();
-            if (projectSelector) projectSelector.value = newProjectID;
-            await updateDashboard(projectData); // Force update to show details right away
             showMessageBox(`Project ${projectData.ProjectName} created successfully with ${initialTasks.length} initial tasks!`, 'success');
         } else {
             const projectErrorMessage = projectResult.message || 'Unknown Project Error';
@@ -496,14 +495,13 @@ if (newProjectForm) {
     });
 }
 
-// --- 8. EXPENSE RECORDING (FIXED) ---
+// --- 8. EXPENSE RECORDING ---
 
 const expenseEntryForm = document.getElementById('expenseEntryForm');
 if (expenseEntryForm) {
     expenseEntryForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        // 🎯 FIX: Use a safe Project ID by falling back to the selector value
         const projectID = currentProjectID || projectSelector.value;
         
         if (!projectID) {
@@ -512,7 +510,7 @@ if (expenseEntryForm) {
         }
 
         const expenseData = {
-            ProjectID: projectID, // Guaranteed to be non-null
+            ProjectID: projectID, 
             Date: document.getElementById('expenseDate').value,
             Description: document.getElementById('expenseDescription').value,
             Amount: parseFloat(document.getElementById('expenseAmount').value) || 0,
@@ -525,8 +523,6 @@ if (expenseEntryForm) {
         if (result.status === 'success') {
             if(expenseEntryForm) expenseEntryForm.reset();
             document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0];
-            
-            // Reload projects to update KPIs/lists, which now correctly restores state
             await loadProjects(); 
             showMessageBox(`Expense recorded successfully!`, 'success');
         } else {
@@ -545,7 +541,6 @@ if (recordDispatchForm) {
     recordDispatchForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        // 🎯 FIX: Use a safe Project ID by falling back to the selector value
         const projectID = currentProjectID || projectSelector.value;
         
         if (!projectID) {
@@ -564,8 +559,6 @@ if (recordDispatchForm) {
         
         if (materialItemId) {
             method = 'PUT';
-            // Note: For a real PUT, you'd need the current dispatched quantity from the API.
-            // Assuming your backend handles the incremental update based on MaterialID and ProjectID.
             payload = {
                 ProjectID: projectID,
                 MaterialID: materialItemId,
@@ -575,7 +568,7 @@ if (recordDispatchForm) {
         } else if (newMaterialName) {
             method = 'POST';
             payload = {
-                ProjectID: projectID, // Guaranteed to be non-null
+                ProjectID: projectID, 
                 MaterialID: `${projectID}-M${Date.now()}`,
                 Name: newMaterialName,
                 RequiredQuantity: requiredQuantity,
@@ -591,7 +584,6 @@ if (recordDispatchForm) {
 
         if (result.status === 'success') {
             recordDispatchForm.reset();
-            // Reload projects to update KPIs/lists, which now correctly restores state
             await loadProjects(); 
             showMessageBox(`Material recorded/updated successfully!`, 'success');
         } else {
@@ -601,7 +593,8 @@ if (recordDispatchForm) {
 }
 
 
-// --- 10. PROJECT DELETION LOGIC (Omitted for brevity) ---
+// --- 10. PROJECT DELETION LOGIC ---
+
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
 if (deleteProjectBtn) {
     deleteProjectBtn.addEventListener('click', async () => {
@@ -636,7 +629,7 @@ if (deleteProjectBtn) {
 }
 
 
-// --- 11. PROJECT EDIT LOGIC (Omitted for brevity) ---
+// --- 11. PROJECT EDIT LOGIC ---
 const projectDetailsDisplay = document.getElementById('projectDetailsDisplay');
 const projectDetailsEdit = document.getElementById('projectDetailsEdit');
 const editProjectDetailsBtn = document.getElementById('editProjectDetailsBtn');
@@ -731,7 +724,6 @@ if (saveProjectDetailsBtn) {
 
         if (result.status === 'success') {
             cleanup();
-            // Load projects and rely on the new logic to re-select the correct project
             await loadProjects(); 
 
             showMessageBox(`Project ${updatedData.ProjectName} updated successfully!`, 'success');
