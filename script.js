@@ -122,17 +122,65 @@ function renderProjectDetails(project) {
 }
 
 // --- PROJECT ADDITION LOGIC (As requested by "not able to add projects") ---
-const addProjectBtn = document.getElementById('addProjectBtn');
+// --- PROJECT ADDITION LOGIC (Restore Modal Functionality) ---
 
-if (addProjectBtn) {
-    // Note: You must add a modal or form in your HTML to actually collect the new project data
+const newProjectModal = document.getElementById('newProjectModal');
+const addProjectBtn = document.getElementById('addProjectBtn');
+const closeButton = newProjectModal ? newProjectModal.querySelector('.close-button') : null;
+const newProjectForm = document.getElementById('newProjectForm');
+
+// 1. Show/Hide Modal Logic
+if (addProjectBtn && newProjectModal && closeButton) {
+    // Show modal
     addProjectBtn.addEventListener('click', () => {
-        // For simplicity, we'll just log an action. 
-        // In a real app, this would open a modal form.
-        showMessageBox("Function to add new project would open here.", 'info');
+        newProjectModal.style.display = 'block';
+    });
+
+    // Hide modal via 'x' button
+    closeButton.addEventListener('click', () => {
+        newProjectModal.style.display = 'none';
+    });
+
+    // Hide modal when clicking outside of it
+    window.addEventListener('click', (event) => {
+        if (event.target == newProjectModal) {
+            newProjectModal.style.display = 'none';
+        }
+    });
+}
+
+
+// 2. Form Submission (POST Request)
+if (newProjectForm) {
+    newProjectForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const newProjectData = {
+            ProjectID: document.getElementById('newProjectID').value,
+            ProjectName: document.getElementById('newProjectName').value,
+            ClientName: document.getElementById('newClientName').value,
+            ProjectLocation: document.getElementById('newProjectLocation').value,
+            ProjectStartDate: document.getElementById('newProjectStartDate').value,
+            ProjectDeadline: document.getElementById('newProjectDeadline').value,
+            ProjectValue: parseFloat(document.getElementById('newProjectValue').value),
+            ProjectType: document.getElementById('newProjectType').value,
+        };
+
+        // Send POST request to the 'Projects' sheet
+        const result = await sendDataToSheet('Projects', 'POST', newProjectData);
+
+        if (result.status === 'success') {
+            showMessageBox(`Project "${newProjectData.ProjectName}" created successfully!`, 'success');
+            newProjectForm.reset();
+            newProjectModal.style.display = 'none';
+            await loadProjects(); // Reload the project list and dashboard
+        } else {
+            showMessageBox(`Failed to create project: ${result.message}`, 'error');
+        }
     });
 }
 
 
 // --- INITIALIZATION ---
 window.onload = loadProjects;
+
