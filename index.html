@@ -223,7 +223,45 @@
         </div>
 
     </div>
+<div id="newProjectModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close-button">&times;</span>
+        <h2>➕ Create New Project</h2>
+        <form id="newProjectForm">
+            <label for="newProjectID">Project ID (Unique):</label>
+            <input type="text" id="newProjectID" required>
 
+            <label for="newProjectName">Project Name:</label>
+            <input type="text" id="newProjectName" required>
+            
+            <label for="newClientName">Client Name:</label>
+            <input type="text" id="newClientName">
+
+            <label for="newProjectLocation">Location:</label>
+            <input type="text" id="newProjectLocation">
+
+            <label for="newProjectStartDate">Start Date:</label>
+            <input type="date" id="newProjectStartDate" required>
+
+            <label for="newProjectDeadline">Deadline:</label>
+            <input type="date" id="newProjectDeadline">
+
+            <label for="newProjectValue">Project Value (INR):</label>
+            <input type="number" id="newProjectValue" min="0" required>
+            
+            <label for="newProjectType">Project Type:</label>
+            <select id="newProjectType" required>
+                <option value="Residential">Residential</option>
+                <option value="Commercial">Commercial</option>
+                <option value="Infrastructure">Infrastructure</option>
+                <option value="Maintenance">Maintenance</option>
+            </select>
+
+            <button type="submit" class="button-primary" style="margin-top: 20px;">Create Project</button>
+        </form>
+    </div>
+</div>
     <script src="script.js"></script>
 </body>
+
 </html>
