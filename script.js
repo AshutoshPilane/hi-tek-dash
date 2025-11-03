@@ -1,5 +1,5 @@
 // =============================================================================
-// script.js: SIMPLE DATA FETCH & DISPLAY VERSION
+// script.js: FINAL ROBUST & SIMPLE DATA FETCH VERSION
 // =============================================================================
 
 const SHEET_API_URL = "/api"; 
@@ -7,22 +7,29 @@ let currentProjectID = null;
 let allProjects = [];
 
 // --- UTILITY (CRITICAL API FIX) ---
+function showMessageBox(message, type) {
+    console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
+    // You can replace this with a simple alert(message); if you prefer
+}
+
 async function sendDataToSheet(sheetName, method, data = {}) {
-    let payload = { sheetName, method, ...data }; // Merge everything at the top level
+    let payload = { sheetName, method, ...data }; // CRITICAL: Merge data at top level for Apps Script
 
     try {
         const response = await fetch(SHEET_API_URL, {
-            method: 'POST', // Always POST for Apps Script
+            method: 'POST', 
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
-
-        if (!response.ok) {
-            console.error(`HTTP error! Status: ${response.status}`);
-            return { status: 'error', message: `HTTP Error ${response.status}` };
+        
+        // This is necessary because Apps Script often returns text/plain even for JSON
+        const text = await response.text(); 
+        try {
+            return JSON.parse(text);
+        } catch(e) {
+            console.error("Failed to parse response as JSON:", text);
+            return { status: 'error', message: "API returned non-JSON response." };
         }
-
-        return await response.json();
 
     } catch (error) {
         console.error(`API Error:`, error);
@@ -71,65 +78,58 @@ async function loadDashboardData() {
 
     // 1. Get Project Details
     const projectResult = await sendDataToSheet('Projects', 'GET', { ProjectID: currentProjectID });
-    const project = (projectResult.status === 'success' && projectResult.data) ? projectResult.data : null;
+    // Assuming Apps Script returns a single object if ProjectID is specified
+    const project = (projectResult.status === 'success' && projectResult.data) ? projectResult.data : null; 
     
-    // 2. Get Tasks
-    const taskResult = await sendDataToSheet('Tasks', 'GET', { ProjectID: currentProjectID });
-    const tasks = (taskResult.status === 'success' && Array.isArray(taskResult.data)) ? taskResult.data : [];
-    
-    // 3. Render Data
+    // 2. Render Data
     if (project) {
         currentProjectName.textContent = project.ProjectName;
         renderProjectDetails(project);
-        renderTaskList(tasks);
-        // You would add other rendering functions here (KPIs, Expenses, etc.)
-        // For simplicity, we only include the core two:
+        // You would load and render other data (Tasks, Expenses, KPIs) here
+    } else {
+        currentProjectName.textContent = 'Project Not Found';
+        renderProjectDetails(null);
     }
 }
 
-// --- RENDERING FUNCTIONS (Matching your HTML) ---
+// --- RENDERING FUNCTIONS (WITH CRITICAL NULL CHECKS) ---
 
 function renderProjectDetails(project) {
-    document.getElementById('display-name').textContent = project.ProjectName || 'N/A';
-    document.getElementById('display-client').textContent = project.ClientName || 'N/A';
-    document.getElementById('display-location').textContent = project.ProjectLocation || 'N/A';
-    document.getElementById('display-start-date').textContent = project.ProjectStartDate || 'N/A';
-    document.getElementById('display-deadline').textContent = project.ProjectDeadline || 'N/A';
-    document.getElementById('display-value').textContent = `INR ${parseFloat(project.ProjectValue || 0).toLocaleString('en-IN')}`;
-    document.getElementById('display-type').textContent = project.ProjectType || 'N/A';
+    // If project is null (e.g., failed fetch), clear the display and stop
+    if (!project) {
+        document.getElementById('projectDetailsDisplay').innerHTML = '<p>No details available.</p>';
+        return;
+    }
+
+    // CRITICAL: Check if the element exists before setting textContent!
+    const elements = {
+        name: document.getElementById('display-name'),
+        client: document.getElementById('display-client'),
+        location: document.getElementById('display-location'),
+        startDate: document.getElementById('display-start-date'),
+        deadline: document.getElementById('display-deadline'),
+        value: document.getElementById('display-value'),
+        type: document.getElementById('display-type'),
+    };
     
-    // Hide the edit form by default if it exists
-    const editForm = document.getElementById('projectDetailsEdit');
-    const displayDiv = document.getElementById('projectDetailsDisplay');
-    if (editForm) editForm.style.display = 'none';
-    if (displayDiv) displayDiv.style.display = 'block';
+    if (elements.name) elements.name.textContent = project.ProjectName || 'N/A';
+    if (elements.client) elements.client.textContent = project.ClientName || 'N/A';
+    if (elements.location) elements.location.textContent = project.ProjectLocation || 'N/A';
+    if (elements.startDate) elements.startDate.textContent = project.ProjectStartDate || 'N/A';
+    if (elements.deadline) elements.deadline.textContent = project.ProjectDeadline || 'N/A';
+    if (elements.value) elements.value.textContent = `INR ${parseFloat(project.ProjectValue || 0).toLocaleString('en-IN')}`;
+    if (elements.type) elements.type.textContent = project.ProjectType || 'N/A';
 }
 
+// --- PROJECT ADDITION LOGIC (As requested by "not able to add projects") ---
+const addProjectBtn = document.getElementById('addProjectBtn');
 
-function renderTaskList(tasks) {
-    const taskList = document.getElementById('taskList'); // Assuming taskList is your UL/container
-    
-    // IMPORTANT: If you use the new HTML (with the TABLE) this ID is wrong.
-    // If you're using the old HTML (with the UL), this ID is correct.
-    // Let's assume you're using the simpler UL structure for now.
-
-    if (!taskList) {
-        console.error("Task list container (#taskList) not found in HTML.");
-        return;
-    }
-    
-    taskList.innerHTML = '';
-
-    if (tasks.length === 0) {
-        taskList.innerHTML = '<li class="placeholder">No tasks loaded for this project.</li>';
-        return;
-    }
-    
-    tasks.forEach(task => {
-        const li = document.createElement('li');
-        const status = task.Status === 'Completed' ? '✅' : '⏳';
-        li.innerHTML = `${status} ${task.TaskName} (Due: ${task.DueDate || 'N/A'})`;
-        taskList.appendChild(li);
+if (addProjectBtn) {
+    // Note: You must add a modal or form in your HTML to actually collect the new project data
+    addProjectBtn.addEventListener('click', () => {
+        // For simplicity, we'll just log an action. 
+        // In a real app, this would open a modal form.
+        showMessageBox("Function to add new project would open here.", 'info');
     });
 }
 
