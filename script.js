@@ -41,12 +41,21 @@ async function sendDataToSheet(sheetName, method, data = {}) {
 const projectSelector = document.getElementById('projectSelector');
 const currentProjectName = document.getElementById('currentProjectName');
 
+// Global variable to temporarily hold the ID of the project just created
+let projectIDToSelect = null; 
+
 async function loadProjects() {
     const result = await sendDataToSheet('Projects', 'GET');
 
     if (result.status === 'success' && Array.isArray(result.data)) {
         allProjects = result.data;
         projectSelector.innerHTML = '<option value="">-- Select Project --</option>';
+
+        // 1. Sort projects by ID descending (assuming higher ID = newer project)
+        allProjects.sort((a, b) => b.ProjectID - a.ProjectID);
+        
+        // Determine which ID to select: use the newly created ID, otherwise use the current ID, otherwise the newest one.
+        const targetID = projectIDToSelect || currentProjectID || (allProjects.length > 0 ? allProjects[0].ProjectID : null);
 
         allProjects.forEach(project => {
             const option = document.createElement('option');
@@ -55,15 +64,47 @@ async function loadProjects() {
             projectSelector.appendChild(option);
         });
 
-        if (allProjects.length > 0) {
-            currentProjectID = allProjects[0].ProjectID;
+        if (targetID) {
+            currentProjectID = targetID;
             projectSelector.value = currentProjectID;
+        } else {
+            currentProjectID = null;
+            currentProjectName.textContent = 'Select a Project';
+        }
+        
+        projectIDToSelect = null; // Clear the temporary ID
+        
+        if (currentProjectID) {
             await loadDashboardData();
         }
+
     } else {
         console.error("Failed to load projects:", result.message);
         currentProjectName.textContent = 'ERROR: Cannot load projects.';
     }
+}
+
+// You also need to modify the newProjectForm submission handler:
+if (newProjectForm) {
+    newProjectForm.addEventListener('submit', async (e) => {
+        // ... (existing code to get newProjectData)
+        
+        // Send POST request...
+        const result = await sendDataToSheet('Projects', 'POST', newProjectData);
+
+        if (result.status === 'success') {
+            showMessageBox(`Project "${newProjectData.ProjectName}" created successfully!`, 'success');
+            newProjectForm.reset();
+            newProjectModal.style.display = 'none';
+            
+            // Set the global variable BEFORE reloading
+            projectIDToSelect = newProjectData.ProjectID; 
+            
+            await loadProjects(); // Reload the project list
+        } else {
+           // ...
+        }
+    });
 }
 
 projectSelector.addEventListener('change', async (e) => {
@@ -183,4 +224,5 @@ if (newProjectForm) {
 
 // --- INITIALIZATION ---
 window.onload = loadProjects;
+
 
