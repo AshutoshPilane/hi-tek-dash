@@ -160,7 +160,7 @@ async function loadProjects() {
 function populateProjectSelector(projects) {
     if (projectSelector) {
         projectSelector.innerHTML = ''; // Clear all options
-        
+
         if (projects.length === 0) {
             projectSelector.innerHTML = '<option value="">No Projects Found</option>';
             return;
@@ -762,5 +762,6 @@ if (saveProjectDetailsBtn) {
 // --- 12. INITIALIZATION ---
 
 window.onload = loadProjects;
+
 
 
