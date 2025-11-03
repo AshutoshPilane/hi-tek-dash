@@ -486,49 +486,39 @@ if (newProjectForm) {
             Status: 'Pending',
         }));
 
-        // 1. Create the project first
+        // 1. Create the project record
         const projectResult = await sendDataToSheet('Projects', 'POST', projectData);
 
         if (projectResult.status !== 'success') {
-             showMessageBox(`Failed to create project: ${projectResult.message}`, 'error');
+             showMessageBox(`Failed to create project: ${projectResult.message || 'Unknown error.'}`, 'error');
              return;
         }
 
-        // 2. Sequentially create the initial tasks (one POST request for each task)
+        // 2. Sequentially create the initial tasks (Fixes 'POST_BATCH not supported' error)
+        // We use Promise.all with POST requests instead of a custom batch method.
         const taskPromises = initialTasks.map(task => 
             sendDataToSheet('Tasks', 'POST', task)
         );
         const taskResults = await Promise.all(taskPromises);
         
-        // Check if any task failed (optional but recommended)
         const failedTasks = taskResults.filter(r => r.status !== 'success');
-
+        
         if (failedTasks.length === 0) {
-            if(newProjectModal) newProjectModal.style.display = 'none';
-            if(newProjectForm) newProjectForm.reset();
-            currentProjectID = newProjectID; 
-            await loadProjects();
-            showMessageBox(`Project ${projectData.ProjectName} created successfully with ${initialTasks.length} initial tasks!`, 'success');
-        } else {
-            // Show a mixed success/error message
-            showMessageBox(`Project created, but ${failedTasks.length} tasks failed to save. Task Error: Check console.`, 'error');
-        }
-        ]);
-
-        if (projectResult.status === 'success' && tasksResult.status === 'success') {
             if(newProjectModal) newProjectModal.style.display = 'none';
             if(newProjectForm) newProjectForm.reset();
             currentProjectID = newProjectID; // Set new project as current
             await loadProjects();
             showMessageBox(`Project ${projectData.ProjectName} created successfully with ${initialTasks.length} initial tasks!`, 'success');
         } else {
-            const projectErrorMessage = projectResult.message || 'Unknown Project Error';
-            const tasksErrorMessage = tasksResult.message || 'Unknown Task Batch Error';
-            showMessageBox(`Failed to create project. Project Error: ${projectErrorMessage}. Task Error: ${tasksErrorMessage}.`, 'error');
+            // Show a mixed success/error message
+            if(newProjectModal) newProjectModal.style.display = 'none';
+            if(newProjectForm) newProjectForm.reset();
+            currentProjectID = newProjectID; 
+            await loadProjects(); // Reload to show the project, even if tasks failed
+            showMessageBox(`Project created, but ${failedTasks.length} tasks failed to save. Please check your API script.`, 'alert');
         }
     });
 }
-
 // --- 8. EXPENSE RECORDING ---
 
 const expenseEntryForm = document.getElementById('expenseEntryForm');
@@ -772,4 +762,5 @@ if (saveProjectDetailsBtn) {
 // --- 12. INITIALIZATION ---
 
 window.onload = loadProjects;
+
 
