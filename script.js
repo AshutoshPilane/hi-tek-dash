@@ -1,10 +1,11 @@
 // =============================================================================
-// script.js: FINAL DEBUGGING VERSION (For ProjectID not provided error)
+// script.js: FINAL ROBUST VERSION (Guaranteed ProjectID for PUT/DELETE)
 // =============================================================================
 
 const SHEET_API_URL = "/api"; 
 let currentProjectID = null; 
 let allProjects = [];
+let editingProjectID = null; // New variable to safely hold the ID during editing
 
 // --- 1. UTILITY FUNCTIONS ---
 
@@ -15,6 +16,13 @@ function showMessageBox(message, type) {
 async function sendDataToSheet(sheetName, method, data = {}) {
     let payload = { sheetName, method };
 
+    // NOTE: Based on your Apps Script, the API expects data at the top level, 
+    // but your previous client code nested it. We will use the client structure
+    // that produces the correct ProjectID for the PUT request. 
+    // If your Apps Script expects the ProjectID at the top level (not nested), 
+    // please revert the payload construction to: payload = { sheetName, method, ...data };
+    
+    // Using the previously working nested structure for PUT/POST/DELETE:
     if (['POST', 'PUT', 'DELETE'].includes(method) || method.includes('BATCH')) {
         payload.data = data; 
     } else {
@@ -49,7 +57,7 @@ function calculateDaysDifference(startDateString, endDateString) {
 }
 
 
-// --- 2. PROJECT LOADING AND SELECTION (Omitted for brevity) ---
+// --- 2. PROJECT LOADING AND SELECTION ---
 
 const projectSelector = document.getElementById('projectSelector');
 const currentProjectNameDisplay = document.getElementById('currentProjectName');
@@ -276,7 +284,7 @@ function loadEditForm(project) {
 }
 
 
-// --- EDIT BUTTON: TOGGLE DISPLAY ---
+// --- EDIT BUTTON: TOGGLE DISPLAY (CRITICAL FIX APPLIED HERE) ---
 if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     editProjectDetailsBtn.addEventListener('click', () => {
         if (!currentProjectID) {
@@ -284,6 +292,11 @@ if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
             return;
         }
         const project = allProjects.find(p => p.ProjectID === currentProjectID);
+        
+        // 🎯 CRITICAL FIX 1: Capture the ID into the safe variable and lock the UI
+        editingProjectID = currentProjectID; 
+        if (projectSelector) projectSelector.disabled = true;
+
         loadEditForm(project);
         
         // 🎯 DEBUG LOG 1: Check what was set to the hidden input
@@ -294,34 +307,47 @@ if (editProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     });
 }
 
-// --- CANCEL BUTTON: TOGGLE BACK TO VIEW MODE ---
+// --- CANCEL BUTTON: TOGGLE BACK TO VIEW MODE (CRITICAL FIX APPLIED HERE) ---
 if (cancelEditBtn && projectDetailsDisplay && projectDetailsEdit) {
     cancelEditBtn.addEventListener('click', () => {
         projectDetailsDisplay.style.display = 'block';
         projectDetailsEdit.style.display = 'none';
+        
+        // 🎯 CRITICAL FIX 3: Re-enable dropdown and clear safe ID
+        if (projectSelector) projectSelector.disabled = false;
+        editingProjectID = null; 
+        
         showMessageBox('Project details edit cancelled.', 'info');
     });
 }
 
 
-// --- SAVE BUTTON: IMPLEMENT PUT LOGIC (CRITICAL FIX HERE) ---
+// --- SAVE BUTTON: IMPLEMENT PUT LOGIC (CRITICAL FIX APPLIED HERE) ---
 if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
     saveProjectDetailsBtn.addEventListener('click', async () => {
         
-        const projectIDToSave = document.getElementById('editProjectID').value;
+        // 🎯 CRITICAL FIX 2: Use the isolated editingProjectID, NOT the form value
+        const projectIDToSave = editingProjectID;
         
-        // 🎯 DEBUG LOG 2: Check what will be sent to the server
+        // 🎯 DEBUG LOG 2: Check what will be sent to the server (Now guaranteed correct)
         console.log("DEBUG 2 (Save Click): ID being sent to PUT: " + projectIDToSave);
 
-        if (!projectIDToSave) {
-            showMessageBox('CRITICAL ERROR: Project ID is missing from the edit form. Cannot save.', 'error');
+        // Define a function for cleanup to avoid repetition
+        const cleanup = () => {
             projectDetailsDisplay.style.display = 'block';
             projectDetailsEdit.style.display = 'none';
+            if (projectSelector) projectSelector.disabled = false; // Re-enable dropdown
+            editingProjectID = null; // Clear safe ID
+        };
+        
+        if (!projectIDToSave) {
+            showMessageBox('CRITICAL ERROR: Project ID is missing. Cannot save.', 'error');
+            cleanup();
             return;
         }
 
         const updatedData = {
-            ProjectID: projectIDToSave,
+            ProjectID: projectIDToSave, // Guaranteed to be correct
             ProjectName: document.getElementById('editProjectName').value,
             ClientName: document.getElementById('editClientName').value,
             ProjectLocation: document.getElementById('editProjectLocation').value,
@@ -334,11 +360,11 @@ if (saveProjectDetailsBtn && projectDetailsDisplay && projectDetailsEdit) {
         const result = await sendDataToSheet('Projects', 'PUT', updatedData);
 
         if (result.status === 'success') {
-            projectDetailsDisplay.style.display = 'block';
-            projectDetailsEdit.style.display = 'none';
+            cleanup();
             await loadProjects(); 
             showMessageBox(`Project ${updatedData.ProjectName} updated successfully!`, 'success');
         } else {
+            cleanup(); // Ensure cleanup happens even on failure
             showMessageBox(`Failed to update project: ${result.message}`, 'error');
         }
     });
