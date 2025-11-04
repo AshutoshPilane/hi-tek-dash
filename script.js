@@ -1,3 +1,9 @@
+// --- AUTHENTICATION CHECK ---
+// This runs first. If not logged in, redirect to login page.
+if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+    window.location.href = 'login.html';
+}
+// ----------------------------
 // ==============================================================================
 // script.js: FINAL OPERATIONAL VERSION (Fixed Sequential Tasks & Delete Bug)
 // ==============================================================================
@@ -1121,3 +1127,4 @@ if (deleteProjectBtn) {
 // --- 9. INITIALIZATION ---
 
 window.onload = loadProjects;
+
