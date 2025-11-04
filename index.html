@@ -23,16 +23,9 @@
             <select id="projectSelector"></select>
             <button id="addProjectBtn" class="button-primary">➕ New Project</button>
             <button id="deleteProjectBtn" class="button-secondary">🗑️ Delete Project</button>
-            <div style="display: flex; gap: 10px; align-items: center;">
-            <label for="projectSelector" style="font-weight: bold;">Current Project:</label>
-            <select id="projectSelector"></select>
-            <button id="addProjectBtn" class="button-primary">➕ New Project</button>
-            <button id="deleteProjectBtn" class="button-secondary">🗑️ Delete Project</button>
             <button id="logoutBtn" class="button-secondary" style="background-color: #dc3545;">Logout</button>
         </div>
-        </div>
     </header>
-
     <div class="panel" style="margin-bottom: 20px;">
         <h2>Key Performance Indicators (KPIs)</h2>
         <div class="kpi-container">
@@ -264,12 +257,14 @@
                     <canvas id="expensePieChart"></canvas>
                 </div>
             </div>
+            
             <h3 style="margin-top: 25px;">Recent History</h3>
             <ul id="recentExpensesList">
                 <li class="placeholder">No expenses loaded...</li>
             </ul>
         </div>
-        </div>
+        
+    </div>
     
     <div id="newProjectModal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -326,4 +321,3 @@
 </body>
 
 </html>
-
