@@ -46,6 +46,7 @@ function formatNumber(num) {
 // ------------------------------------------------------------------------------------
 
 // --- 1. THE HI TEK 23-STEP WORKFLOW LIST ---
+// --- 1. THE HI TEK 23-STEP WORKFLOW LIST (Corrected Sequence) ---
 const HI_TEK_TASKS_MAP = [
     { Name: '1. Understanding the System', Responsible: 'Project Manager' },
     { Name: '2. Identifying Scope', Responsible: 'Site Engineer/Project coordinator' },
@@ -54,22 +55,22 @@ const HI_TEK_TASKS_MAP = [
     { Name: '5. Calculate Project Cost', Responsible: 'Estimation Engineer/Cost Analyst' },
     { Name: '6. Review Payment Terms', Responsible: 'Accounts Manager/Contract Specialist' },
     { Name: '7. Calculate BOQ', Responsible: 'Estimation Engineer/Procurement Manager' },
-    { Name: '8. Compare Costs', Responsible: 'Accounts/Procurement' },
-    { Name: '9. Order Materials', Responsible: 'Procurement Manager' },
-    { Name: '10. Issue Work Orders', Responsible: 'Project Manager' },
-    { Name: '11. Mobilize Manpower', Responsible: 'HR/Contractor' },
-    { Name: '12. Site Setup & Safety Check', Responsible: 'Safety Officer/Site Engineer' },
-    { Name: '13. Initial Survey & Layout', Responsible: 'Surveyor' },
-    { Name: '14. Earthwork/Excavation', Responsible: 'Site Engineer' },
-    { Name: '15. Foundation Work', Responsible: 'Site Engineer' },
-    { Name: '16. Structural Frame Erection', Responsible: 'Contractor/Site Engineer' },
-    { Name: '17. Plumbing & Electrical Rough-in', Responsible: 'MEP Coordinator' },
-    { Name: '18. Finishing Work (Walls/Floors)', Responsible: 'Site Supervisor' },
-    { Name: '19. Installation of Services', Responsible: 'MEP Coordinator' },
-    { Name: '20. Quality Inspection (Pre-handover)', Responsible: 'Quality Inspector' },
-    { Name: '21. Final Cleanup & Punch List', Responsible: 'Project Manager' },
-    { Name: '22. Project Handover', Responsible: 'Project Manager/Client' },
-    { Name: '23. Final Billing & Closure', Responsible: 'Accounts Manager' }
+    { Name: '8. Compare Costs', Responsible: 'Procurement Manager/Cost Analyst' },
+    { Name: '9. Manage Materials', Responsible: 'Procurement Manager/Warehouse Supervisor' },
+    { Name: '10. Prepare BOQ for Production', Responsible: 'Production Planner' },
+    { Name: '11. Approval from Director', Responsible: 'Director/General Manager' },
+    { Name: '12. Production', Responsible: 'Production Supervisor' },
+    { Name: '13. Post-Production Check', Responsible: 'Quality Inspector' },
+    { Name: '14. Dispatch', Responsible: 'Logistics Manager' },
+    { Name: '15. Installation', Responsible: 'Site Engineer/Contractor' },
+    { Name: '16. Handover Measurements', Responsible: 'Surveyor/Field Engineer' },
+    { Name: '17. Cross-Check Final Work', Responsible: 'Quality Inspector/Site Engineer' },
+    { Name: '18. Create Abstract Invoice', Responsible: 'Accounts Manager' },
+    { Name: '19. Approval from Director', Responsible: 'Director/General Manager' },
+    { Name: '20. Process Invoice', Responsible: 'Accounts Executive' },
+    { Name: '21. Submit Bill On-Site', Responsible: 'Accounts Executive/Project Manager' },
+    { Name: '22. Payment Follow-Up', Responsible: 'Accounts Manager' },
+    { Name: '23. Submit No-Objection Letter', Responsible: 'Project Manager' }
 ];
 
 
@@ -861,4 +862,5 @@ if (deleteProjectBtn) {
 // --- 9. INITIALIZATION ---
 
 window.onload = loadProjects;
+
 
