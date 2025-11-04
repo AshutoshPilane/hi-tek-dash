@@ -128,9 +128,14 @@
                         <option value="">-- Select a Task --</option>
                     </select>
                     
-                    <label for="taskProgress">Progress (%):</label>
-                    <input type="range" id="taskProgress" min="0" max="100" value="0" oninput="this.nextElementSibling.value=this.value+'%'">
-                    <output>0%</output>
+                    <label for="taskProgress">Progress:</label>
+                    <select id="taskProgress" required>
+                        <option value="0">0%</option>
+                        <option value="25">25%</option>
+                        <option value="50">50%</option>
+                        <option value="75">75%</option>
+                        <option value="100">100%</option>
+                    </select>
                     
                     <label for="taskDue">New Due Date:</label>
                     <input type="date" id="taskDue">
@@ -274,6 +279,18 @@
                     <option value="Infrastructure">Infrastructure</option>
                     <option value="Maintenance">Maintenance</option>
                 </select>
+
+                <label for="newContractor">Contractor:</label>
+                <input type="text" id="newContractor">
+                
+                <label for="newEngineers">Engineers:</label>
+                <input type="text" id="newEngineers">
+                
+                <label for="newContact1">Contact 1:</label>
+                <input type="text" id="newContact1">
+                
+                <label for="newContact2">Contact 2:</label>
+                <input type="text" id="newContact2">
 
                 <button type="submit" class="button-primary" style="margin-top: 20px;">Create Project</button>
             </form>
