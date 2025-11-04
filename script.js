@@ -642,7 +642,7 @@ if (addProjectBtn) {
 }
 
 closeModalButtons.forEach(btn => {
-    btn.addEventListener('click', ()_ => {
+    btn.addEventListener('click', () => {
         if(newProjectModal) newProjectModal.style.display = 'none';
         const projectDetailsEdit = document.getElementById('projectDetailsEdit');
         const projectDetailsDisplay = document.getElementById('projectDetailsDisplay');
@@ -861,3 +861,4 @@ if (deleteProjectBtn) {
 // --- 9. INITIALIZATION ---
 
 window.onload = loadProjects;
+
