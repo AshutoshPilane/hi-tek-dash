@@ -141,6 +141,12 @@ form select {
     color: #333;
 }
 
+/* NEW: Added style for overdue KPI */
+.kpi-box .value.overdue {
+    color: #dc3545; /* Red */
+    font-weight: bold;
+}
+
 .kpi-full-width {
     grid-column: span 2;
 }
@@ -259,6 +265,9 @@ form select {
     border-radius: 10px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
     position: relative;
+    /* Added for scrolling on long forms */
+    max-height: 90vh;
+    overflow-y: auto;
 }
 
 .close-btn {
