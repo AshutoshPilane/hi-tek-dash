@@ -1,61 +1,45 @@
-// --- NEW HELPER FUNCTION TO READ COOKIES ---
-function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-}
-// -----------------------------------------
-
-// --- AUTHENTICATION CHECK (DEBUG MODE) ---
+// --- AUTHENTICATION CHECK (USING COOKIES) ---
 function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
     if (parts.length === 2) return parts.pop().split(';').shift();
 }
 
-const loginCookie = getCookie('isLoggedIn');
-
-if (loginCookie !== 'true') {
-    // We have a problem. Show a debug alert.
-    alert(`DEBUG: Auth check failed.\nCookie value: ${loginCookie}\n(Expected: 'true')\nRedirecting to login...`);
-    
-    // Redirect to login.
+if (getCookie('isLoggedIn') !== 'true') {
+    // User is not logged in. Redirect.
     window.location.href = '/login.html';
 }
-// --- End of Auth Check ---
-
+// ----------------------------
 
 
 // ==============================================================================
-// script.js: FINAL OPERATIONAL VERSION
+// (Rest of your script.js file)
 // ==============================================================================
-// Vercel, please update! (v2)
-// 🎯 CRITICAL: USING THE LOCAL PROXY PATH (/api)
 const SHEET_API_URL = "/api"; 
 
 let currentProjectID = null; 
 let allProjects = [];
 let currentMaterialsData = []; 
-let currentTasksData = []; // Stores the full task data for the selected project
-let expensePieChart = null; // Holds the pie chart instance
-let budgetBarChart = null; // Holds the bar chart instance
+let currentTasksData = [];
+let expensePieChart = null;
+let budgetBarChart = null;
 
-// --- NEW FUNCTION: Replaces alert() with Toastify notifications ---
+// --- Toastify notifications ---
 function showMessageBox(message, type) {
     console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
     let backgroundColor;
     switch (type) {
         case 'success':
-            backgroundColor = "linear-gradient(to right, #00b09b, #96c93d)"; // Green
+            backgroundColor = "linear-gradient(to right, #00b09b, #96c93d)";
             break;
         case 'error':
-            backgroundColor = "linear-gradient(to right, #ff5f6d, #ffc371)"; // Red/Orange
+            backgroundColor = "linear-gradient(to right, #ff5f6d, #ffc371)";
             break;
         case 'alert':
-            backgroundColor = "linear-gradient(to right, #ffc107, #ff9a00)"; // Yellow/Orange
+            backgroundColor = "linear-gradient(to right, #ffc107, #ff9a00)";
             break;
         default:
-            backgroundColor = "#007bff"; // Blue (default)
+            backgroundColor = "#007bff";
     }
     Toastify({
         text: message,
@@ -68,7 +52,7 @@ function showMessageBox(message, type) {
     }).showToast();
 }
 
-// --- Date Formatting Fix ---
+// --- Date Formatting ---
 function formatDate(isoDateString) {
     if (!isoDateString) return 'N/A';
     if (isoDateString.length === 10 && isoDateString.includes('-')) {
@@ -82,7 +66,7 @@ function formatDate(isoDateString) {
     }
 }
 
-// --- Number Formatting for INR (₹) ---
+// --- Number Formatting ---
 function formatNumber(num) {
     const number = parseFloat(num) || 0;
     return new Intl.NumberFormat('en-IN', { 
@@ -92,7 +76,7 @@ function formatNumber(num) {
     }).format(number);
 }
 
-// --- Spinner Helper Functions ---
+// --- Spinner Helpers ---
 function showSpinner(button) {
     button.disabled = true;
     const spinner = document.createElement('span');
@@ -108,7 +92,7 @@ function hideSpinner(button) {
 }
 // ------------------------------------------------------------------------------------
 
-// --- 1. THE HI TEK 23-STEP WORKFLOW LIST (Corrected Sequence) ---
+// --- 1. THE HI TEK 23-STEP WORKFLOW LIST ---
 const HI_TEK_TASKS_MAP = [
     { Name: '1. Understanding the System', Responsible: 'Project Manager' },
     { Name: '2. Identifying Scope', Responsible: 'Site Engineer/Project coordinator' },
@@ -913,9 +897,8 @@ const logoutBtn = document.getElementById('logoutBtn');
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
         // Delete the cookie by setting its max-age to 0
-        document.cookie = "isLoggedIn=; path=/; max-age=0"; 
+        document.cookie = "isLoggedIn=; path=/; max-age=0; SameSite=Strict"; 
         window.location.href = '/login.html'; // Go back to login page
     });
 }
 // ---------------------------
-
