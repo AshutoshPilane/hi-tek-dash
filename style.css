@@ -3,7 +3,7 @@
 /* ================================================= */
 
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Inter', Arial, sans-serif;
     background-color: #f4f7f9;
     color: #333;
     margin: 0;
@@ -24,9 +24,10 @@ header {
 header h1 {
     margin: 0;
     font-size: 1.5em;
+    font-weight: 700;
 }
 
-header select {
+header select, header button {
     padding: 8px;
     border-radius: 4px;
     border: none;
@@ -34,7 +35,16 @@ header select {
     background-color: white;
     color: #333;
     min-width: 150px;
+    margin-left: 10px;
 }
+
+/* Header Flex Layout */
+.header-left, .header-right {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 
 /* ================================================= */
 /* BUTTONS & FORMS */
@@ -45,45 +55,87 @@ header select {
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    font-weight: bold;
-    transition: background-color 0.2s ease;
+    transition: background-color 0.3s ease, transform 0.1s;
+    font-weight: 600;
 }
 
 .button-primary {
-    background-color: #28a745;
+    background-color: #007bff;
     color: white;
 }
 
 .button-primary:hover {
-    background-color: #1e7e34;
+    background-color: #0056b3;
 }
 
 .button-secondary {
     background-color: #6c757d;
     color: white;
+    margin-left: 10px;
 }
 
 .button-secondary:hover {
     background-color: #5a6268;
 }
 
-form label {
-    display: block;
-    margin-top: 10px;
-    font-weight: bold;
+/* Form Styling */
+.form-group {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
 }
 
-form input[type="text"],
-form input[type="number"],
-form input[type="date"],
-form select {
-    width: 100%;
+.form-group label {
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: #555;
+}
+
+.form-group input[type="text"], 
+.form-group input[type="number"], 
+.form-group input[type="date"],
+.form-group select {
     padding: 10px;
-    margin-top: 5px;
-    margin-bottom: 15px;
     border: 1px solid #ccc;
     border-radius: 4px;
-    box-sizing: border-box; /* Ensures padding doesn't affect overall width */
+    font-size: 1em;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.form-inline {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px dashed #eee;
+}
+
+.form-inline .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.form-inline button {
+    flex-shrink: 0;
+}
+
+.flex-row {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+    flex-wrap: wrap;
+}
+
+.flex-row .w-50 {
+    flex: 1 1 calc(50% - 7.5px);
+    min-width: 120px;
+}
+
+.flex-row .w-33 {
+    flex: 1 1 calc(33.333% - 10px);
+    min-width: 80px;
 }
 
 /* ================================================= */
@@ -92,23 +144,84 @@ form select {
 
 .dashboard-grid {
     display: grid;
-    grid-template-columns: 2fr 1fr; /* Task list wider than Expenses/Details */
+    /* Main Layout: Project Details | KPIs | Tasks/Materials/Expenses */
+    grid-template-columns: 1fr 1.5fr; 
+    grid-template-rows: auto auto 1fr;
     gap: 20px;
     padding: 20px;
-    max-width: 1400px;
-    margin: 0 auto;
+}
+
+/* Span elements across columns for structure */
+.project-details-panel {
+    grid-column: 1 / 2;
+    grid-row: 1 / 3; /* Project details takes two rows on the left */
+}
+
+.kpi-panel {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
+}
+
+.task-tracker-panel {
+    grid-column: 1 / 2;
+    grid-row: 3 / 4;
+}
+
+.material-tracker-panel {
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+}
+
+.expense-tracker-panel {
+    grid-column: 2 / 3;
+    grid-row: 3 / 4;
 }
 
 .panel {
     background-color: white;
-    padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    padding: 25px;
 }
 
-/* Make Project Details full width on top of the two columns */
-.panel:nth-child(1) {
-    grid-column: span 2;
+.panel h2 {
+    color: #007bff;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+.panel h3 {
+    font-size: 1.1em;
+    margin-top: 20px;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.mt-4 {
+    margin-top: 20px;
+}
+
+/* Project Details Styling */
+.detail-group {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 4px 0;
+    border-bottom: 1px dotted #eee;
+}
+
+.detail-group label {
+    font-weight: 600;
+    color: #333;
+    flex-shrink: 0;
+    margin-right: 15px;
+}
+
+.detail-group span {
+    text-align: right;
+    color: #555;
+    flex-grow: 1;
 }
 
 /* ================================================= */
@@ -116,179 +229,248 @@ form select {
 /* ================================================= */
 
 .kpi-container {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 15px;
-    margin-top: 15px;
 }
 
 .kpi-box {
-    background-color: #e9ecef;
-    padding: 15px;
+    flex: 1 1 calc(33.333% - 15px); /* Three items per row */
+    min-width: 150px;
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
     border-radius: 6px;
+    padding: 15px;
     text-align: center;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.kpi-box .label {
+.kpi-label {
+    display: block;
     font-size: 0.9em;
     color: #6c757d;
     margin-bottom: 5px;
+    font-weight: 600;
 }
 
-.kpi-box .value {
-    font-size: 1.5em;
-    font-weight: bold;
-    color: #333;
+.kpi-value {
+    font-size: 1.8em;
+    font-weight: 700;
+    color: #007bff;
 }
 
-.kpi-full-width {
-    grid-column: span 2;
+.kpi-value.overdue {
+    color: #dc3545; /* Red for overdue */
 }
 
 
 /* ================================================= */
-/* TASK LIST */
+/* TABLES & TRACKERS */
 /* ================================================= */
 
-#taskList {
-    list-style: none;
-    padding: 0;
-    margin-top: 15px;
+.scroll-table {
+    max-height: 350px; /* Limits the height of the tables */
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
 }
 
-#taskList li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 1px solid #eee;
+table {
+    width: 100%;
+    border-collapse: collapse;
     font-size: 0.9em;
 }
 
-#taskList li:last-child {
-    border-bottom: none;
+table th, table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
 }
 
-.task-info {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
+table th {
+    background-color: #007bff;
+    color: white;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
 }
 
-.task-responsible, .task-date {
-    font-size: 0.8em;
-    color: #6c757d;
-    margin-top: 2px;
+table tr:nth-child(even) {
+    background-color: #f8f9fa;
 }
 
-.task-status-btn {
-    padding: 5px 10px;
-    border: none;
+/* Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
     border-radius: 4px;
-    font-size: 0.85em;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.2s;
+    font-size: 0.8em;
+    font-weight: 600;
 }
 
-.task-status-btn.pending {
-    background-color: #ffc107; /* Yellow */
+.status-pending {
+    background-color: #ffc107;
     color: #333;
 }
-
-.task-status-btn.complete {
-    background-color: #28a745; /* Green */
+.status-in-progress {
+    background-color: #17a2b8;
+    color: white;
+}
+.status-completed {
+    background-color: #28a745;
+    color: white;
+}
+.status-overdue {
+    background-color: #dc3545;
     color: white;
 }
 
-.task-status-btn.pending:hover {
-    background-color: #e0a800;
+/* Progress Bars */
+.progress-bar-wrap {
+    background-color: #e9ecef;
+    border-radius: 5px;
+    height: 8px;
+    width: 80px;
+    display: inline-block;
+    overflow: hidden;
+    vertical-align: middle;
 }
 
-.task-status-btn.complete:hover {
-    background-color: #1e7e34;
+.progress-bar {
+    background-color: #007bff;
+    height: 100%;
+    transition: width 0.5s ease;
+    display: block;
 }
 
-#taskList li.completed strong {
-    text-decoration: line-through;
-    color: #999;
+.progress-bar.bg-success {
+    background-color: #28a745;
 }
 
-/* ================================================= */
-/* EXPENSE LIST */
-/* ================================================= */
-
-#recentExpensesList {
+/* Expense List */
+.expense-list {
     list-style: none;
     padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
 }
 
-#recentExpensesList li {
-    padding: 8px 0;
-    border-bottom: 1px dotted #ccc;
-    font-size: 0.9em;
+.expense-list li {
+    padding: 10px 0;
+    border-bottom: 1px dotted #eee;
+    font-size: 0.95em;
 }
 
-#recentExpensesList li.placeholder {
-    color: #999;
+.expense-list li:last-child {
+    border-bottom: none;
+}
+
+.expense-amount {
+    font-weight: 600;
+    color: #dc3545;
 }
 
 /* ================================================= */
-/* MODAL STYLES (New/Edit Project) */
+/* MESSAGE BOX */
+/* ================================================= */
+
+.message-box {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    padding: 15px 25px;
+    border-radius: 6px;
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    opacity: 0.95;
+    transition: opacity 0.3s ease;
+}
+
+.message-success {
+    background-color: #28a745;
+}
+
+.message-error {
+    background-color: #dc3545;
+}
+
+.message-alert {
+    background-color: #ffc107;
+    color: #333;
+}
+
+
+/* ================================================= */
+/* MODAL STYLING */
 /* ================================================= */
 
 .modal {
-    display: none; /* Hidden by default */
-    position: fixed; /* Stay in place */
-    z-index: 1000; /* Sit on top */
+    display: none; 
+    position: fixed; 
+    z-index: 1; 
     left: 0;
     top: 0;
-    width: 100%; /* Full width */
-    height: 100%; /* Full height */
-    overflow: auto; /* Enable scroll if needed */
-    background-color: rgba(0, 0, 0, 0.4); /* Black w/ opacity */
+    width: 100%; 
+    height: 100%; 
+    overflow: auto; 
+    background-color: rgba(0,0,0,0.4); 
+    align-items: center;
+    justify-content: center;
 }
 
 .modal-content {
     background-color: #fefefe;
-    margin: 5% auto; /* 5% from the top and centered */
     padding: 30px;
-    border: 1px solid #888;
-    width: 90%; /* Could be more or less, depending on screen size */
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
     max-width: 500px;
-    border-radius: 10px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    width: 90%;
     position: relative;
 }
 
-.close-btn {
+.modal-content h2 {
+    margin-top: 0;
+}
+
+.close-button {
     color: #aaa;
     float: right;
     font-size: 28px;
     font-weight: bold;
     position: absolute;
     top: 10px;
-    right: 20px;
+    right: 15px;
 }
 
-.close-btn:hover,
-.close-btn:focus {
+.close-button:hover,
+.close-button:focus {
     color: #000;
     text-decoration: none;
     cursor: pointer;
 }
 
-.modal-content h2 {
-    margin-top: 0;
-    color: #007bff;
-    border-bottom: 2px solid #eee;
-    padding-bottom: 10px;
-    margin-bottom: 20px;
-}
 
 /* ================================================= */
 /* MOBILE RESPONSIVENESS */
 /* ================================================= */
+
+@media (max-width: 1200px) {
+    /* Adjust grid for mid-sized screens */
+    .dashboard-grid {
+        grid-template-columns: 1fr 1fr; /* Two columns */
+        grid-template-rows: auto auto auto auto;
+    }
+    
+    /* Reset grid area definitions */
+    .project-details-panel { grid-column: 1 / 2; grid-row: 1 / 2; }
+    .kpi-panel { grid-column: 2 / 3; grid-row: 1 / 2; }
+    .material-tracker-panel { grid-column: 1 / 2; grid-row: 2 / 3; }
+    .task-tracker-panel { grid-column: 2 / 3; grid-row: 2 / 3; }
+    .expense-tracker-panel { grid-column: 1 / 3; grid-row: 3 / 4; }
+}
+
 
 @media (max-width: 768px) {
     /* 1. Change the main grid to a single column */
@@ -298,11 +480,16 @@ form select {
         gap: 15px;
     }
 
-    /* Make the Project Details panel occupy the full single column */
-    .panel:nth-child(1) {
+    /* Make all panels occupy the full single column */
+    .project-details-panel,
+    .kpi-panel,
+    .task-tracker-panel,
+    .material-tracker-panel,
+    .expense-tracker-panel {
         grid-column: span 1;
+        grid-row: auto;
     }
-
+    
     /* 2. Header stacking for better layout */
     header {
         padding: 15px 10px;
@@ -320,29 +507,44 @@ form select {
     header select, header button {
         margin-top: 5px;
         width: 100%;
+        margin-left: 0;
     }
 
     /* 3. Restructure the KPI box to be scannable in two columns */
     .kpi-container {
-        grid-template-columns: repeat(2, 1fr); /* Two columns for KPIs */
-        gap: 8px;
+        justify-content: space-between;
     }
-
     .kpi-box {
-        padding: 10px;
-        font-size: 0.8em;
+        flex: 1 1 calc(50% - 10px); /* Two items per row */
+        min-width: unset;
     }
     
-    .kpi-box .value {
-        font-size: 1.2em;
+    /* 4. Adjust form layouts */
+    .form-inline {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .form-inline .form-group {
+        width: 100%;
+    }
+    
+    .form-inline button {
+        width: 100%;
+        margin-top: 10px;
+    }
+    
+    .flex-row {
+        flex-direction: column;
+    }
+    .flex-row .w-50, .flex-row .w-33 {
+        width: 100%;
+        flex: 1 1 100%;
     }
 
-    .kpi-full-width {
-        grid-column: span 2;
-    }
-
-    .modal-content {
-        margin: 20% auto;
-        padding: 20px;
+    /* Adjust table fonts for smaller screens */
+    table th, table td {
+        padding: 8px;
+        font-size: 0.85em;
     }
 }
