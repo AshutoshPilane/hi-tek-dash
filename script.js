@@ -11,10 +11,37 @@ let currentMaterialsData = [];
 let currentTasksData = []; // Stores the full task data for the selected project
 
 // --- DUMMY FUNCTION for error/success messages (Required for error-free execution) ---
+// --- NEW FUNCTION: Replaces alert() with Toastify notifications ---
 function showMessageBox(message, type) {
     console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
-    // This is a placeholder. A real app would show a UI element.
-    alert(`[${type.toUpperCase()}] ${message}`);
+
+    // Determine background color based on type
+    let backgroundColor;
+    switch (type) {
+        case 'success':
+            backgroundColor = "linear-gradient(to right, #00b09b, #96c93d)"; // Green
+            break;
+        case 'error':
+            backgroundColor = "linear-gradient(to right, #ff5f6d, #ffc371)"; // Red/Orange
+            break;
+        case 'alert':
+            backgroundColor = "linear-gradient(to right, #ffc107, #ff9a00)"; // Yellow/Orange
+            break;
+        default:
+            backgroundColor = "#007bff"; // Blue (default)
+    }
+
+    Toastify({
+        text: message,
+        duration: 3000, // 3 seconds
+        close: true,
+        gravity: "top", // `top` or `bottom`
+        position: "right", // `left`, `center` or `right`
+        stopOnFocus: true, // Prevents dismissing if user is hovering
+        style: {
+            background: backgroundColor,
+        }
+    }).showToast();
 }
 
 // --- NEW HELPER FUNCTION: Date Formatting Fix for ISO Strings (Issue 1 Fix) ---
@@ -838,6 +865,7 @@ if (saveProjectDetailsBtn) {
 
 
 // --- Delete Project Logic ---
+// --- Delete Project Logic (MODIFIED to use SweetAlert2) ---
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
 
 if (deleteProjectBtn) {
@@ -849,38 +877,47 @@ if (deleteProjectBtn) {
 
         const projectToDeleteName = allProjects.find(p => p.ProjectID === currentProjectID)?.Name || currentProjectID;
 
-        // Use a real confirmation
-        if (!confirm(`Are you sure you want to delete ${projectToDeleteName}?\nThis will delete ALL associated tasks, materials, and expenses.\nThis action cannot be undone.`)) {
-            return;
-        }
+        // NEW: Use SweetAlert2 for confirmation
+        Swal.fire({
+            title: `Are you sure you want to delete ${projectToDeleteName}?`,
+            text: "This will delete ALL associated tasks, materials, and expenses. This action cannot be undone.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, delete it!'
+        }).then(async (result) => {
+            // This code runs AFTER the user clicks a button
+            if (result.isConfirmed) {
+                // User confirmed, proceed with deletion
+                const deletePayload = { ProjectID: currentProjectID };
+                
+                showMessageBox(`Deleting ${projectToDeleteName} and all its data...`, 'alert');
 
-        // MODIFIED: Send DELETE requests to all 4 sheets to prevent orphaned data
-        const deletePayload = { ProjectID: currentProjectID };
-        
-        // Show a loading message
-        showMessageBox(`Deleting ${projectToDeleteName} and all its data...`, 'alert');
+                try {
+                    const results = await Promise.all([
+                        sendDataToSheet('Projects', 'DELETE', deletePayload),
+                        sendDataToSheet('Tasks', 'DELETE', deletePayload),
+                        sendDataToSheet('Materials', 'DELETE', deletePayload),
+                        sendDataToSheet('Expenses', 'DELETE', deletePayload)
+                    ]);
 
-        try {
-            const results = await Promise.all([
-                sendDataToSheet('Projects', 'DELETE', deletePayload),
-                sendDataToSheet('Tasks', 'DELETE', deletePayload),
-                sendDataToSheet('Materials', 'DELETE', deletePayload),
-                sendDataToSheet('Expenses', 'DELETE', deletePayload)
-            ]);
+                    const failures = results.filter(res => res.status !== 'success');
 
-            const failures = results.filter(res => res.status !== 'success');
+                    if (failures.length > 0) {
+                        throw new Error(failures.map(f => f.message).join(', '));
+                    }
 
-            if (failures.length > 0) {
-                throw new Error(failures.map(f => f.message).join(', '));
+                    currentProjectID = null; // Clear current selection
+                    await loadProjects(); // Reload projects
+                    showMessageBox(`Project ${projectToDeleteName} was successfully deleted.`, 'success');
+
+                } catch (error) {
+                    showMessageBox(`Failed to delete project: ${error.message}`, 'error');
+                }
             }
-
-            currentProjectID = null; // Clear current selection
-            await loadProjects(); // Reload projects
-            showMessageBox(`Project ${projectToDeleteName} was successfully deleted.`, 'success');
-
-        } catch (error) {
-             showMessageBox(`Failed to delete project: ${error.message}`, 'error');
-        }
+        });
+        // End of new SweetAlert2 logic
     });
 }
 
@@ -888,6 +925,7 @@ if (deleteProjectBtn) {
 // --- 9. INITIALIZATION ---
 
 window.onload = loadProjects;
+
 
 
 
