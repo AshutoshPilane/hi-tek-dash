@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hi Tek Dashboard - Login</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f7f9;
+        }
+        .login-panel {
+            width: 90%;
+            max-width: 400px;
+        }
+        .login-panel h2 {
+            text-align: center;
+            color: #007bff;
+        }
+        #message-container {
+            text-align: center;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        #message-container.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="panel login-panel">
+        <h2>Hi Tek Dashboard Login</h2>
+        <div id="message-container"></div>
+        <form id="loginForm">
+            <label for="username">Username:</label>
+            <input type="text" id="username" required>
+            
+            <label for="password">Password:</label>
+            <input type="password" id="password" required>
+            
+            <button type="submit" class="button-primary" style="width: 100%; margin-top: 15px;">Login</button>
+        </form>
+    </div>
+
+    <style>
+        .btn-spinner{display:inline-block;width:1em;height:1em;border:2px solid rgba(255,255,255,0.3);border-radius:50%;border-top-color:#fff;animation:spin 1s ease-in-out infinite;-webkit-animation:spin 1s ease-in-out infinite;margin-left:8px;vertical-align:middle}@keyframes spin{to{-webkit-transform:rotate(360deg)}}@-webkit-keyframes spin{to{-webkit-transform:rotate(360deg)}}.button-primary:disabled{opacity:0.7;cursor:not-allowed}
+    </style>
+    <script src="login.js"></script>
+</body>
+</html>
