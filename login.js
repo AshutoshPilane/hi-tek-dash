@@ -16,6 +16,15 @@ function hideSpinner(button) {
 
 const loginForm = document.getElementById('loginForm');
 const messageContainer = document.getElementById('message-container');
+const continueBtn = document.getElementById('continueBtn');
+
+// --- NEW: Add click listener for the continue button ---
+continueBtn.addEventListener('click', () => {
+    // Manually navigate to the dashboard
+    window.location.href = '/'; 
+});
+// -----------------------------------------------------
+
 
 loginForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -33,11 +42,9 @@ loginForm.addEventListener('submit', async (e) => {
     try {
         const response = await fetch('/api', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                method: 'LOGIN', // This tells our Code.gs to use the handleLogin function
+                method: 'LOGIN',
                 username: username,
                 password: password
             }),
@@ -46,26 +53,32 @@ loginForm.addEventListener('submit', async (e) => {
         const result = await response.json();
 
         if (result.status === 'success') {
-    // SUCCESS! Store the login session.
-    localStorage.setItem('isLoggedIn', 'true');
+            // --- MODIFIED: On success, do NOT redirect ---
+            
+            // 1. Store the login session.
+            localStorage.setItem('isLoggedIn', 'true');
+            
+            // 2. Hide the login form
+            loginForm.style.display = 'none';
+            messageContainer.style.display = 'none';
 
-    // NEW: Redirect to the main dashboard WITH a flag
-    // This flag tells index.html "I just came from a successful login"
-    setTimeout(() => {
-        window.location.href = '/?fromLogin=true'; 
-    }, 100); // 100 milliseconds
-
-} else {
-// ...
+            // 3. Show the "Continue" button
+            continueBtn.style.display = 'block';
+            
+            // Note: We intentionally stop and do NOT redirect.
+            // The user must now click the "Continue" button.
+            
+        } else {
             // Show error message
             messageContainer.textContent = result.message;
             messageContainer.className = 'error';
+            hideSpinner(submitButton); // Only hide spinner on failure
         }
         
     } catch (error) {
         messageContainer.textContent = 'Failed to connect to API. Check network.';
         messageContainer.className = 'error';
-    } finally {
-        hideSpinner(submitButton);
+        hideSpinner(submitButton); // Only hide spinner on failure
     }
+    // We no longer use a 'finally' block, as the button stays hidden on success
 });
