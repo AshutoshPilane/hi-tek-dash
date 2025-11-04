@@ -417,3 +417,46 @@ form select {
         grid-template-columns: 1fr; /* Single column on tablets and mobile */
     }
 }
+/* ================================================= */
+/* LOGIN STYLES (NEW) */
+/* ================================================= */
+
+body {
+    /* This ensures the login form can center properly if shown */
+    min-height: 100vh;
+}
+
+#login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: 100px;
+}
+
+.login-panel {
+    width: 90%;
+    max-width: 400px;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+}
+
+.login-panel h2 {
+    text-align: center;
+    color: #007bff;
+    margin-top: 0;
+}
+
+#message-container {
+    text-align: center;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    display: none;
+    color: #721c24;
+    background-color: #f8d7da;
+}
+#message-container.show {
+    display: block;
+}
