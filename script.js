@@ -42,17 +42,6 @@ function formatDate(isoDateString) {
         return isoDateString; // Return original if parsing fails
     }
 }
-
-// --- NEW HELPER FUNCTION: Number Formatting for INR (₹) ---
-function formatNumber(num) {
-    // Ensure num is treated as a number, defaulting to 0
-    const number = parseFloat(num) || 0;
-    return new Intl.NumberFormat('en-IN', { 
-        style: 'decimal', 
-        minimumFractionDigits: 0, 
-        maximumFractionDigits: 0 
-    }).format(number);
-}
 // ------------------------------------------------------------------------------------
 
 // --- 1. THE HI TEK 23-STEP WORKFLOW LIST ---
@@ -531,8 +520,8 @@ if (recordDispatchForm) {
             const existingMaterial = currentMaterialsData.find(m => m.MaterialName === materialItemId);
             
             if (!existingMaterial) {
-                showMessageBox('Error: Existing material not found in current data.', 'error');
-                return;
+                 showMessageBox('Error: Existing material not found in current data.', 'error');
+                 return;
             }
 
             const currentDispatched = parseFloat(existingMaterial.DispatchedQuantity) || 0;
@@ -773,55 +762,50 @@ if (editProjectDetailsBtn) {
         document.getElementById('editEngineers').value = project.Engineers || '';
         document.getElementById('editContact1').value = project.Contact1 || '';
         document.getElementById('editContact2').value = project.Contact2 || '';
-        
+
         toggleEditMode(true);
     });
 }
 
 if (cancelEditBtn) {
-    cancelEditBtn.addEventListener('click', () => {
-        toggleEditMode(false);
-    });
+    cancelEditBtn.addEventListener('click', () => toggleEditMode(false));
 }
 
-if (saveProjectDetailsBtn) {
-    saveProjectDetailsBtn.addEventListener('click', async () => {
-        if (!currentProjectID) return;
+const projectEditForm = document.getElementById('projectEditForm');
+if (projectEditForm) {
+    // Listening for a click on the form but checking for the save button click
+    projectEditForm.addEventListener('click', async (e) => { 
+        if (e.target.id !== 'saveProjectDetailsBtn') return; 
+        e.preventDefault();
 
+        // --- CRITICAL: Project data keys must match Sheet Headers ---
         const updatedData = {
-            ProjectID: currentProjectID,
-            Name: document.getElementById('editProjectName').value, 
+            ProjectID: document.getElementById('editProjectID').value,
+            Name: document.getElementById('editProjectName').value, // FIX: Matches Sheet Header 'Name'
             ClientName: document.getElementById('editClientName').value,
             ProjectLocation: document.getElementById('editProjectLocation').value,
-            StartDate: document.getElementById('editProjectStartDate').value,
-            Deadline: document.getElementById('editProjectDeadline').value,
-            Budget: parseFloat(document.getElementById('editProjectValue').value) || 0,
+            StartDate: document.getElementById('editProjectStartDate').value, // FIX: Matches Sheet Header 'StartDate'
+            Deadline: document.getElementById('editProjectDeadline').value, // FIX: Matches Sheet Header 'Deadline'
+            Budget: parseFloat(document.getElementById('editProjectValue').value), // FIX: Matches Sheet Header 'Budget'
             ProjectType: document.getElementById('editProjectType').value,
             Contractor: document.getElementById('editContractor').value,
             Engineers: document.getElementById('editEngineers').value,
             Contact1: document.getElementById('editContact1').value,
             Contact2: document.getElementById('editContact2').value,
         };
+        // -----------------------------------------------------------------------------
 
         const result = await sendDataToSheet('Projects', 'PUT', updatedData);
 
         if (result.status === 'success') {
-            // Temporarily update the local project list before full reload
-            const index = allProjects.findIndex(p => p.ProjectID === currentProjectID);
-            if (index !== -1) {
-                // Update only fields that exist in the result or form data
-                allProjects[index] = { ...allProjects[index], ...updatedData };
-            }
-            
             toggleEditMode(false);
-            await loadProjects(); // Full reload to ensure consistency
-            showMessageBox('Project details updated successfully!', 'success');
+            await loadProjects(); // Reload projects and dashboard
+            showMessageBox(`Project ${updatedData.Name} updated successfully!`, 'success');
         } else {
             showMessageBox(`Failed to update project: ${result.message}`, 'error');
         }
     });
 }
-
 
 // --- Delete Project Logic ---
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
@@ -852,6 +836,17 @@ if (deleteProjectBtn) {
 }
 
 
-// --- 9. INITIALIZATION ---
+// --- 9. HELPER FUNCTIONS ---
+
+function formatNumber(num) {
+    return new Intl.NumberFormat('en-IN', { 
+        style: 'decimal', 
+        minimumFractionDigits: 0, 
+        maximumFractionDigits: 0 
+    }).format(num);
+}
+
+
+// --- 10. INITIALIZATION ---
 
 window.onload = loadProjects;
