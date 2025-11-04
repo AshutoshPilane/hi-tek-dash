@@ -1131,10 +1131,11 @@ window.onload = loadProjects;
 const logoutBtn = document.getElementById('logoutBtn');
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
-        sessionStorage.removeItem('isLoggedIn'); // Clear the login session
+        localStorage.removeItem('isLoggedIn'); // Clear the login session
         window.location.href = 'login.html'; // Go back to login page
     });
 }
 // ---------------------------
+
 
 
