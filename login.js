@@ -19,12 +19,11 @@ const messageContainer = document.getElementById('message-container');
 const continueBtn = document.getElementById('continueBtn');
 
 // --- NEW: Storage Tester ---
-// This runs immediately to see if storage is blocked (e.g., Private Browsing)
 try {
+    // We still test localStorage, as it's a good proxy for private mode
     localStorage.setItem('__test__', '1');
     localStorage.removeItem('__test__');
 } catch (e) {
-    // Storage is blocked! Show an error and hide the form.
     messageContainer.textContent = 'Error: Your browser is blocking storage. Please try again in a non-private (normal) browser tab.';
     messageContainer.className = 'error';
     loginForm.style.display = 'none';
@@ -47,10 +46,8 @@ loginForm.addEventListener('submit', async (e) => {
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
     
-    // Hide old messages
     messageContainer.style.display = 'none';
     messageContainer.textContent = '';
-    
     showSpinner(submitButton);
 
     try {
@@ -67,10 +64,11 @@ loginForm.addEventListener('submit', async (e) => {
         const result = await response.json();
 
         if (result.status === 'success') {
-            // --- MODIFIED: On success, do NOT redirect ---
             
-            // 1. Store the login session.
-            localStorage.setItem('isLoggedIn', 'true');
+            // --- MODIFIED: Use a COOKIE instead of localStorage ---
+            // Sets a cookie that lasts for 1 hour (3600 seconds)
+            document.cookie = "isLoggedIn=true; path=/; max-age=3600";
+            // ----------------------------------------------------
             
             // 2. Hide the login form
             loginForm.style.display = 'none';
@@ -79,11 +77,7 @@ loginForm.addEventListener('submit', async (e) => {
             // 3. Show the "Continue" button
             continueBtn.style.display = 'block';
             
-            // Note: We intentionally stop and do NOT redirect.
-            // The user must now click the "Continue" button.
-            
         } else {
-            // Show error message
             messageContainer.textContent = result.message;
             messageContainer.className = 'error';
             hideSpinner(submitButton); // Only hide spinner on failure
