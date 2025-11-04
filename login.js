@@ -46,13 +46,13 @@ loginForm.addEventListener('submit', async (e) => {
         const result = await response.json();
 
         if (result.status === 'success') {
-    // SUCCESS! Store the login session in the browser.
-   localStorage.setItem('isLoggedIn', 'true');
+    // SUCCESS! Store the login session.
+    localStorage.setItem('isLoggedIn', 'true');
 
-    // NEW: Add a 100ms delay to give Safari time to save
+    // NEW: Redirect to the main dashboard WITH a flag
+    // This flag tells index.html "I just came from a successful login"
     setTimeout(() => {
-        // Redirect to the main dashboard
-        window.location.href = '/'; 
+        window.location.href = '/?fromLogin=true'; 
     }, 100); // 100 milliseconds
 
 } else {
