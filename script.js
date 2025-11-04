@@ -6,12 +6,24 @@ function getCookie(name) {
 }
 // -----------------------------------------
 
-// --- AUTHENTICATION CHECK (MODIFIED TO USE COOKIES) ---
-if (getCookie('isLoggedIn') !== 'true') {
-    // User is not logged in. Redirect.
+// --- AUTHENTICATION CHECK (DEBUG MODE) ---
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+}
+
+const loginCookie = getCookie('isLoggedIn');
+
+if (loginCookie !== 'true') {
+    // We have a problem. Show a debug alert.
+    alert(`DEBUG: Auth check failed.\nCookie value: ${loginCookie}\n(Expected: 'true')\nRedirecting to login...`);
+    
+    // Redirect to login.
     window.location.href = '/login.html';
 }
-// ----------------------------
+// --- End of Auth Check ---
+
 
 
 // ==============================================================================
@@ -906,3 +918,4 @@ if (logoutBtn) {
     });
 }
 // ---------------------------
+
