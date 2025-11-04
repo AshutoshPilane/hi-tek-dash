@@ -1,6 +1,6 @@
 // --- AUTHENTICATION CHECK ---
 // This runs first. If not logged in, redirect to login page.
-if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+if (localStorage.getItem('isLoggedIn') !== 'true') {
     window.location.href = 'login.html';
 }
 // ----------------------------
@@ -1136,4 +1136,5 @@ if (logoutBtn) {
     });
 }
 // ---------------------------
+
 
