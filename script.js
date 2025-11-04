@@ -1,7 +1,7 @@
 // --- AUTHENTICATION CHECK ---
 // This runs first. If not logged in, redirect to login page.
 if (localStorage.getItem('isLoggedIn') !== 'true') {
-    window.location.href = 'login.html';
+    window.location.href = '/login.html';
 }
 // ----------------------------
 // ==============================================================================
@@ -1132,10 +1132,11 @@ const logoutBtn = document.getElementById('logoutBtn');
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
         localStorage.removeItem('isLoggedIn'); // Clear the login session
-        window.location.href = 'login.html'; // Go back to login page
+        window.location.href = '/login.html'; // Go back to login page
     });
 }
 // ---------------------------
+
 
 
 
