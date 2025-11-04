@@ -1,7 +1,7 @@
 // ==============================================================================
 // script.js: FINAL OPERATIONAL VERSION (Fixed Sequential Tasks & Delete Bug)
 // ==============================================================================
-
+// Vercel, please update! (v2)
 // 🎯 CRITICAL: USING THE LOCAL PROXY PATH (/api)
 const SHEET_API_URL = "/api"; 
 
@@ -862,5 +862,6 @@ if (deleteProjectBtn) {
 // --- 9. INITIALIZATION ---
 
 window.onload = loadProjects;
+
 
 
