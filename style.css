@@ -296,6 +296,36 @@ form select {
 }
 
 /* ================================================= */
+/* LOADING SPINNER (for buttons) */
+/* ================================================= */
+
+.btn-spinner {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+    -webkit-animation: spin 1s ease-in-out infinite;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { -webkit-transform: rotate(360deg); }
+}
+@-webkit-keyframes spin {
+    to { -webkit-transform: rotate(360deg); }
+}
+
+/* Style for when button is loading */
+.button-primary:disabled,
+.button-secondary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+/* ================================================= */
 /* MOBILE RESPONSIVENESS */
 /* ================================================= */
 
@@ -355,3 +385,4 @@ form select {
         padding: 20px;
     }
 }
+
