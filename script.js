@@ -70,9 +70,24 @@ function formatNumber(num) {
         maximumFractionDigits: 0 
     }).format(number);
 }
+
+// --- Spinner Helper Functions (NEW) ---
+function showSpinner(button) {
+    button.disabled = true;
+    const spinner = document.createElement('span');
+    spinner.className = 'btn-spinner';
+    button.appendChild(spinner);
+}
+
+function hideSpinner(button) {
+    button.disabled = false;
+    const spinner = button.querySelector('.btn-spinner');
+    if (spinner) {
+        button.removeChild(spinner);
+    }
+}
 // ------------------------------------------------------------------------------------
 
-// --- 1. THE HI TEK 23-STEP WORKFLOW LIST ---
 // --- 1. THE HI TEK 23-STEP WORKFLOW LIST (Corrected Sequence) ---
 const HI_TEK_TASKS_MAP = [
     { Name: '1. Understanding the System', Responsible: 'Project Manager' },
@@ -449,12 +464,15 @@ if (taskSelector) {
     });
 }
 
+// MODIFIED: Added spinner logic
 const updateTaskForm = document.getElementById('updateTaskForm');
 if (updateTaskForm) {
     updateTaskForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        // MODIFIED: Read from the new <select> dropdown
+        // Get the submit button from the form
+        const submitButton = updateTaskForm.querySelector('button[type="submit"]');
+
         const taskID = document.getElementById('taskId').value;
         const progress = document.getElementById('taskProgress').value;
         const dueDate = document.getElementById('taskDue').value;
@@ -467,6 +485,9 @@ if (updateTaskForm) {
             showMessageBox('Please select a task to update.', 'alert');
             return;
         }
+        
+        // --- Show spinner ---
+        showSpinner(submitButton);
 
         const progressValue = parseFloat(progress) || 0;
         const status = progressValue === 100 ? 'Completed' : (progressValue === 0 ? 'Pending' : 'In Progress');
@@ -479,23 +500,26 @@ if (updateTaskForm) {
             Status: status,
         };
 
-        const result = await sendDataToSheet('Tasks', 'PUT', updatedData);
+        try {
+            const result = await sendDataToSheet('Tasks', 'PUT', updatedData);
 
-        if (result.status === 'success') {
-            await updateDashboard(currentProjectID);
-            showMessageBox(`Task updated successfully!`, 'success');
-        } else {
-            showMessageBox(`Failed to update task: ${result.message}`, 'error');
+            if (result.status === 'success') {
+                await updateDashboard(currentProjectID);
+                showMessageBox(`Task updated successfully!`, 'success');
+            } else {
+                showMessageBox(`Failed to update task: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            showMessageBox(`An unexpected error occurred: ${error.message}`, 'error');
+        } finally {
+            // --- Hide spinner ---
+            hideSpinner(submitButton);
         }
     });
 }
 
 
 // --- 6. MATERIAL TRACKER LOGIC ---
-
-// NOTE: Your material update logic was already correct.
-// The code below *accumulates* dispatch quantity, which is the correct
-// behavior for a "Record Dispatch" form.
 
 function renderMaterials(materials) {
     const materialTableBody = document.getElementById('materialTableBody');
@@ -557,10 +581,14 @@ function calculateMaterialKPI(materials) {
 }
 
 
+// MODIFIED: Added spinner logic
 const recordDispatchForm = document.getElementById('recordDispatchForm');
 if (recordDispatchForm) {
     recordDispatchForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
+        // Get the submit button
+        const submitButton = recordDispatchForm.querySelector('button[type="submit"]');
         
         if (!currentProjectID) {
             showMessageBox('Please select a project first.', 'alert');
@@ -573,51 +601,60 @@ if (recordDispatchForm) {
         const dispatchQuantity = parseFloat(document.getElementById('dispatchQuantity').value) || 0;
         const materialUnit = document.getElementById('materialUnit').value;
 
-        let result;
+        let actionType = newMaterialName ? 'POST' : 'PUT';
+        let payload = {};
 
         if (materialItemId) {
             // Case 1: Updating an existing material (Dispatch)
             const existingMaterial = currentMaterialsData.find(m => m.MaterialName === materialItemId);
-            
             if (!existingMaterial) {
-                showMessageBox('Error: Existing material not found in current data.', 'error');
+                showMessageBox('Error: Existing material not found.', 'error');
                 return;
             }
-            
-            // This logic is CORRECT. It *adds* the new dispatch to the existing total.
             const currentDispatched = parseFloat(existingMaterial.DispatchedQuantity) || 0;
             const newTotalDispatched = currentDispatched + dispatchQuantity;
 
-            const updatedData = {
+            payload = {
                 ProjectID: currentProjectID,
                 MaterialName: materialItemId,
-                DispatchedQuantity: newTotalDispatched.toString() // Send the accumulated total
+                DispatchedQuantity: newTotalDispatched.toString()
             };
-
-            result = await sendDataToSheet('Materials', 'PUT', updatedData); 
+            actionType = 'PUT';
 
         } else if (newMaterialName) {
             // Case 2: Adding a new material (POST)
-            const newMaterialData = {
+            payload = {
                 ProjectID: currentProjectID,
                 MaterialName: newMaterialName,
                 RequiredQuantity: requiredQuantity,
                 DispatchedQuantity: dispatchQuantity,
                 Unit: materialUnit
             };
-            result = await sendDataToSheet('Materials', 'POST', newMaterialData);
+            actionType = 'POST';
 
         } else {
-            showMessageBox('Please select an existing material or enter a new material name.', 'alert');
+            showMessageBox('Please select an existing material or enter a new one.', 'alert');
             return;
         }
 
-        if (result.status === 'success') {
-            await updateDashboard(currentProjectID);
-            recordDispatchForm.reset();
-            showMessageBox(`Material dispatch/entry recorded successfully!`, 'success');
-        } else {
-            showMessageBox(`Failed to record material entry: ${result.message}`, 'error');
+        // --- Show spinner ---
+        showSpinner(submitButton);
+
+        try {
+            const result = await sendDataToSheet('Materials', actionType, payload);
+
+            if (result.status === 'success') {
+                await updateDashboard(currentProjectID);
+                recordDispatchForm.reset();
+                showMessageBox(`Material entry recorded successfully!`, 'success');
+            } else {
+                showMessageBox(`Failed to record material entry: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            showMessageBox(`An unexpected error occurred: ${error.message}`, 'error');
+        } finally {
+            // --- Hide spinner ---
+            hideSpinner(submitButton);
         }
     });
 }
@@ -651,10 +688,14 @@ function calculateExpenseKPI(expenses) {
     document.getElementById('kpi-total-expenses').textContent = `₹ ${formatNumber(totalExpenses)}`;
 }
 
+// MODIFIED: Added spinner logic
 const expenseEntryForm = document.getElementById('expenseEntryForm');
 if (expenseEntryForm) {
     expenseEntryForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        // Get the submit button
+        const submitButton = expenseEntryForm.querySelector('button[type="submit"]');
 
         if (!currentProjectID) {
             showMessageBox('Please select a project first.', 'alert');
@@ -670,14 +711,29 @@ if (expenseEntryForm) {
             RecordedBy: 'User (App)'
         };
 
-        const result = await sendDataToSheet('Expenses', 'POST', newExpenseData);
+        if (!newExpenseData.Date || !newExpenseData.Description || newExpenseData.Amount <= 0) {
+            showMessageBox('Please fill in all required expense fields.', 'alert');
+            return;
+        }
+        
+        // --- Show spinner ---
+        showSpinner(submitButton);
 
-        if (result.status === 'success') {
-            await updateDashboard(currentProjectID);
-            expenseEntryForm.reset();
-            showMessageBox(`Expense of ₹${formatNumber(newExpenseData.Amount)} recorded successfully!`, 'success');
-        } else {
-            showMessageBox(`Failed to record expense: ${result.message}`, 'error');
+        try {
+            const result = await sendDataToSheet('Expenses', 'POST', newExpenseData);
+
+            if (result.status === 'success') {
+                await updateDashboard(currentProjectID);
+                expenseEntryForm.reset();
+                showMessageBox(`Expense of ₹${formatNumber(newExpenseData.Amount)} recorded!`, 'success');
+            } else {
+                showMessageBox(`Failed to record expense: ${result.message}`, 'error');
+            }
+        } catch (error) {
+            showMessageBox(`An unexpected error occurred: ${error.message}`, 'error');
+        } finally {
+            // --- Hide spinner ---
+            hideSpinner(submitButton);
         }
     });
 }
@@ -712,10 +768,14 @@ window.addEventListener('click', (event) => {
 });
 
 
+// MODIFIED: Added spinner logic
 const newProjectForm = document.getElementById('newProjectForm');
 if (newProjectForm) {
     newProjectForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+
+        // Get the submit button
+        const submitButton = newProjectForm.querySelector('button[type="submit"]');
 
         const newProjectID = document.getElementById('newProjectID').value.trim();
         if (!newProjectID) {
@@ -723,7 +783,9 @@ if (newProjectForm) {
             return;
         }
         
-        // MODIFIED: Reads the new fields from the updated form
+        // --- Show spinner ---
+        showSpinner(submitButton);
+
         const projectData = {
             ProjectID: newProjectID,
             Name: document.getElementById('newProjectName').value,
@@ -733,10 +795,10 @@ if (newProjectForm) {
             Deadline: document.getElementById('newProjectDeadline').value,
             Budget: parseFloat(document.getElementById('newProjectValue').value) || 0,
             ProjectType: document.getElementById('newProjectType').value,
-            Contractor: document.getElementById('newContractor').value, // <-- FIXED
-            Engineers: document.getElementById('newEngineers').value,   // <-- FIXED
-            Contact1: document.getElementById('newContact1').value,     // <-- FIXED
-            Contact2: document.getElementById('newContact2').value,     // <-- FIXED
+            Contractor: document.getElementById('newContractor').value,
+            Engineers: document.getElementById('newEngineers').value,
+            Contact1: document.getElementById('newContact1').value,
+            Contact2: document.getElementById('newContact2').value,
             CreationDate: new Date().toISOString().split('T')[0]
         };
 
@@ -750,32 +812,41 @@ if (newProjectForm) {
             Status: 'Pending',
         }));
 
-        const projectResult = await sendDataToSheet('Projects', 'POST', projectData);
+        try {
+            const projectResult = await sendDataToSheet('Projects', 'POST', projectData);
 
-        if (projectResult.status !== 'success') {
-             showMessageBox(`Failed to create project: ${projectResult.message || 'Unknown error.'}`, 'error');
-             return;
-        }
+            if (projectResult.status !== 'success') {
+                 showMessageBox(`Failed to create project: ${projectResult.message || 'Unknown error.'}`, 'error');
+                 // Don't hide spinner here, let finally do it
+                 throw new Error("Project creation failed");
+            }
 
-        const taskPromises = initialTasks.map(task => 
-            sendDataToSheet('Tasks', 'POST', task)
-        );
-        const taskResults = await Promise.all(taskPromises);
-        
-        const failedTasks = taskResults.filter(r => r.status !== 'success');
-        
-        if (failedTasks.length === 0) {
-            if(newProjectModal) newProjectModal.style.display = 'none';
-            if(newProjectForm) newProjectForm.reset();
-            currentProjectID = newProjectID; 
-            await loadProjects();
-            showMessageBox(`Project ${projectData.Name} created successfully with ${initialTasks.length} initial tasks!`, 'success');
-        } else {
-            if(newProjectModal) newProjectModal.style.display = 'none';
-            if(newProjectForm) newProjectForm.reset();
-            currentProjectID = newProjectID; 
-            await loadProjects(); 
-            showMessageBox(`Project created, but ${failedTasks.length} tasks failed to save.`, 'alert');
+            const taskPromises = initialTasks.map(task => 
+                sendDataToSheet('Tasks', 'POST', task)
+            );
+            const taskResults = await Promise.all(taskPromises);
+            
+            const failedTasks = taskResults.filter(r => r.status !== 'success');
+            
+            if (failedTasks.length === 0) {
+                if(newProjectModal) newProjectModal.style.display = 'none';
+                if(newProjectForm) newProjectForm.reset();
+                currentProjectID = newProjectID; 
+                await loadProjects();
+                showMessageBox(`Project ${projectData.Name} created successfully!`, 'success');
+            } else {
+                if(newProjectModal) newProjectModal.style.display = 'none';
+                if(newProjectForm) newProjectForm.reset();
+                currentProjectID = newProjectID; 
+                await loadProjects(); 
+                showMessageBox(`Project created, but ${failedTasks.length} tasks failed to save.`, 'alert');
+            }
+        } catch (error) {
+            console.error("Error in new project submission:", error);
+            // Error message already shown, just log
+        } finally {
+            // --- Hide spinner ---
+            hideSpinner(submitButton);
         }
     });
 }
@@ -827,9 +898,13 @@ if (cancelEditBtn) {
     });
 }
 
+// MODIFIED: Added spinner logic
 if (saveProjectDetailsBtn) {
     saveProjectDetailsBtn.addEventListener('click', async () => {
         if (!currentProjectID) return;
+
+        // --- Show spinner ---
+        showSpinner(saveProjectDetailsBtn); 
 
         const updatedData = {
             ProjectID: currentProjectID,
@@ -846,25 +921,31 @@ if (saveProjectDetailsBtn) {
             Contact2: document.getElementById('editContact2').value,
         };
 
-        const result = await sendDataToSheet('Projects', 'PUT', updatedData);
+        try {
+            const result = await sendDataToSheet('Projects', 'PUT', updatedData);
 
-        if (result.status === 'success') {
-            const index = allProjects.findIndex(p => p.ProjectID === currentProjectID);
-            if (index !== -1) {
-                allProjects[index] = { ...allProjects[index], ...updatedData };
+            if (result.status === 'success') {
+                const index = allProjects.findIndex(p => p.ProjectID === currentProjectID);
+                if (index !== -1) {
+                    allProjects[index] = { ...allProjects[index], ...updatedData };
+                }
+                
+                toggleEditMode(false);
+                await loadProjects(); 
+                showMessageBox('Project details updated successfully!', 'success');
+            } else {
+                showMessageBox(`Failed to update project: ${result.message}`, 'error');
             }
-            
-            toggleEditMode(false);
-            await loadProjects(); 
-            showMessageBox('Project details updated successfully!', 'success');
-        } else {
-            showMessageBox(`Failed to update project: ${result.message}`, 'error');
+        } catch (error) {
+            showMessageBox(`An unexpected error occurred: ${error.message}`, 'error');
+        } finally {
+            // --- Hide spinner ---
+            hideSpinner(saveProjectDetailsBtn);
         }
     });
 }
 
 
-// --- Delete Project Logic ---
 // --- Delete Project Logic (MODIFIED to use SweetAlert2) ---
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
 
@@ -925,8 +1006,3 @@ if (deleteProjectBtn) {
 // --- 9. INITIALIZATION ---
 
 window.onload = loadProjects;
-
-
-
-
-
