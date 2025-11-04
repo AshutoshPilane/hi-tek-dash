@@ -1,8 +1,27 @@
 // --- AUTHENTICATION CHECK ---
 // This runs first. If not logged in, redirect to login page.
-if (localStorage.getItem('isLoggedIn') !== 'true') {
+// --- AUTHENTICATION CHECK (v2 - iOS Fix) ---
+const urlParams = new URLSearchParams(window.location.search);
+const fromLogin = urlParams.has('fromLogin');
+const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+
+if (isLoggedIn) {
+    // User is already logged in. All good.
+    // Clean the URL just in case
+    if (fromLogin) {
+        window.history.replaceState({}, document.title, "/");
+    }
+} else if (fromLogin) {
+    // User just arrived from a successful login, but localStorage might be slow/blocked.
+    // Set it NOW on this page, then clean the URL.
+    localStorage.setItem('isLoggedIn', 'true');
+    window.history.replaceState({}, document.title, "/");
+} else {
+    // User is not logged in and did not just arrive from login page.
+    // Redirect to login.
     window.location.href = '/login.html';
 }
+// ----------------------------
 // ----------------------------
 // ==============================================================================
 // script.js: FINAL OPERATIONAL VERSION (Fixed Sequential Tasks & Delete Bug)
@@ -1136,6 +1155,7 @@ if (logoutBtn) {
     });
 }
 // ---------------------------
+
 
 
 
