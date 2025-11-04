@@ -52,7 +52,7 @@ loginForm.addEventListener('submit', async (e) => {
     // NEW: Add a 100ms delay to give Safari time to save
     setTimeout(() => {
         // Redirect to the main dashboard
-        window.location.href = 'index.html'; 
+        window.location.href = '/'; 
     }, 100); // 100 milliseconds
 
 } else {
