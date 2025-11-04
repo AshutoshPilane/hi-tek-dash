@@ -47,7 +47,7 @@ loginForm.addEventListener('submit', async (e) => {
 
         if (result.status === 'success') {
     // SUCCESS! Store the login session in the browser.
-    sessionStorage.setItem('isLoggedIn', 'true');
+   localStorage.setItem('isLoggedIn', 'true');
 
     // NEW: Add a 100ms delay to give Safari time to save
     setTimeout(() => {
