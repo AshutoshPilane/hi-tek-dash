@@ -9,6 +9,8 @@ let currentProjectID = null;
 let allProjects = [];
 let currentMaterialsData = []; 
 let currentTasksData = []; // Stores the full task data for the selected project
+let expensePieChart = null; // Holds the pie chart instance
+let budgetBarChart = null; // Holds the bar chart instance
 
 // --- DUMMY FUNCTION for error/success messages (Required for error-free execution) ---
 // --- NEW FUNCTION: Replaces alert() with Toastify notifications ---
@@ -227,6 +229,7 @@ if (projectSelector) {
 
 // --- 4. DASHBOARD UPDATING AND KPI CALCULATION ---
 
+// MODIFIED: Added chart destroy calls
 function resetDashboard() {
     currentProjectNameDisplay.textContent = 'Select a Project';
     const kpis = ['kpi-days-spent', 'kpi-days-left', 'kpi-progress', 'kpi-material-progress', 'kpi-work-order', 'kpi-total-expenses'];
@@ -252,11 +255,19 @@ function resetDashboard() {
     if(materialTableBody) materialTableBody.innerHTML = '<tr><td colspan="5">No materials loaded...</td></tr>';
     const recentExpensesList = document.getElementById('recentExpensesList');
     if(recentExpensesList) recentExpensesList.innerHTML = '<li class="placeholder">No expenses loaded...</li>';
+
+    // NEW: Destroy charts
+    if (expensePieChart) {
+        expensePieChart.destroy();
+        expensePieChart = null;
+    }
+    if (budgetBarChart) {
+        budgetBarChart.destroy();
+        budgetBarChart = null;
+    }
 }
 
-/**
- * Main function to refresh all dashboard components for the selected project.
- */
+// MODIFIED: Added chart-drawing calls
 async function updateDashboard(projectID) {
     if (!projectID) return resetDashboard();
 
@@ -267,31 +278,22 @@ async function updateDashboard(projectID) {
     
     updateProjectDetails(projectData);
     
-    // 2. Load Tasks and Update Task Tracker / Progress KPI
+    // 2. Load Tasks
     const taskResult = await sendDataToSheet('Tasks', 'GET', { ProjectID: projectID });
     if (taskResult.status === 'success') {
-
-        // ====================================================================
-        // --- CRITICAL FIX: Sort tasks by the number in their TaskID ---
-        // This stops the list from appearing in a "random" order
         const sortedTasks = taskResult.data.sort((a, b) => {
-            // Helper to extract the number from "PROJ-T1", "PROJ-T10", etc.
             const getTaskNum = (taskID) => {
                 if (!taskID) return 0;
-                // Looks for the number after "-T"
                 const match = taskID.match(/-T(\d+)$/); 
                 return match ? parseInt(match[1], 10) : 0;
             };
-            
             const numA = getTaskNum(a.TaskID);
             const numB = getTaskNum(b.TaskID);
-            
-            return numA - numB; // Sorts numerically (1, 2, 3... 10, 11)
+            return numA - numB;
         });
-        // ====================================================================
 
-        currentTasksData = sortedTasks; // Store the SORTED data
-        renderTasks(currentTasksData); // Render the SORTED data
+        currentTasksData = sortedTasks; 
+        renderTasks(currentTasksData);
         calculateTaskKPI(currentTasksData);
     } else {
         console.error('Failed to load tasks:', taskResult.message);
@@ -299,10 +301,10 @@ async function updateDashboard(projectID) {
         renderTasks([]);
     }
 
-    // 3. Load Materials and Update Material Tracker / Material KPI
+    // 3. Load Materials
     const materialResult = await sendDataToSheet('Materials', 'GET', { ProjectID: projectID });
     if (materialResult.status === 'success') {
-        currentMaterialsData = materialResult.data; // Store for lookups
+        currentMaterialsData = materialResult.data;
         renderMaterials(currentMaterialsData);
         calculateMaterialKPI(currentMaterialsData);
     } else {
@@ -311,16 +313,30 @@ async function updateDashboard(projectID) {
         renderMaterials([]);
     }
 
-    // 4. Load Expenses and Update Expense Tracker / Expense KPI
+    // 4. Load Expenses (and render charts)
     const expenseResult = await sendDataToSheet('Expenses', 'GET', { ProjectID: projectID });
     if (expenseResult.status === 'success') {
         renderExpenses(expenseResult.data);
         calculateExpenseKPI(expenseResult.data);
+
+        // --- NEW: CALL CHART FUNCTIONS ---
+        // Pass the loaded project data and expense data
+        renderExpenseChart(expenseResult.data);
+        renderBudgetChart(projectData, expenseResult.data);
+        // ---------------------------------
+        
     } else {
         console.error('Failed to load expenses:', expenseResult.message);
         renderExpenses([]);
+        
+        // --- NEW: Clear charts on failure ---
+        if (expensePieChart) expensePieChart.destroy();
+        if (budgetBarChart) budgetBarChart.destroy();
+        renderExpenseChart([]);
+        renderBudgetChart(projectData, []);
     }
 }
+
 
 /**
  * Updates the Project Details panel and related date/value KPIs.
@@ -687,6 +703,105 @@ function calculateExpenseKPI(expenses) {
     const totalExpenses = expenses.reduce((sum, e) => sum + (parseFloat(e.Amount) || 0), 0);
     document.getElementById('kpi-total-expenses').textContent = `₹ ${formatNumber(totalExpenses)}`;
 }
+
+// --- NEW: CHART DRAWING FUNCTIONS ---
+
+/**
+ * Draws the "Expenses by Category" pie chart.
+ */
+function renderExpenseChart(expenses) {
+    const ctx = document.getElementById('expensePieChart');
+    if (!ctx) return; // Exit if canvas not found
+
+    // 1. Process the data
+    const categories = {}; // e.g., { Material: 1000, Labor: 500 }
+    expenses.forEach(e => {
+        const amount = parseFloat(e.Amount) || 0;
+        categories[e.Category] = (categories[e.Category] || 0) + amount;
+    });
+
+    // 2. Destroy the old chart if it exists (prevents bugs)
+    if (expensePieChart) {
+        expensePieChart.destroy();
+    }
+
+    // 3. Create the new chart
+    expensePieChart = new Chart(ctx.getContext('2d'), {
+        type: 'pie',
+        data: {
+            labels: Object.keys(categories),
+            datasets: [{
+                data: Object.values(categories),
+                backgroundColor: [
+                    '#007bff', // Blue
+                    '#28a745', // Green
+                    '#ffc107', // Yellow
+                    '#dc3545', // Red
+                    '#6c757d'  // Gray
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            }
+        }
+    });
+}
+
+/**
+ * Draws the "Budget vs. Expenses" bar chart.
+ */
+function renderBudgetChart(project, expenses) {
+    const ctx = document.getElementById('budgetBarChart');
+    if (!ctx) return; // Exit if canvas not found
+
+    // 1. Process the data
+    const budget = parseFloat(project.Budget) || 0;
+    const totalExpenses = expenses.reduce((sum, e) => sum + (parseFloat(e.Amount) || 0), 0);
+    const remaining = budget - totalExpenses;
+
+    // 2. Destroy the old chart if it exists
+    if (budgetBarChart) {
+        budgetBarChart.destroy();
+    }
+
+    // 3. Create the new chart
+    budgetBarChart = new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: ['Total Budget', 'Total Expenses', 'Remaining'],
+            datasets: [{
+                label: 'Amount (INR)',
+                data: [budget, totalExpenses, remaining],
+                backgroundColor: [
+                    '#007bff', // Blue
+                    '#ffc107', // Yellow
+                    remaining < 0 ? '#dc3545' : '#28a745' // Red if over budget, Green if not
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: false // Hide legend for simple bar chart
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
 
 // MODIFIED: Added spinner logic
 const expenseEntryForm = document.getElementById('expenseEntryForm');
