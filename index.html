@@ -4,12 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hi Tek Project Dashboard</title>
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -244,13 +246,23 @@
                 </form>
             </div>
 
+            <h3 style="margin-top: 25px;">Financial Overview</h3>
+            <div class="chart-container">
+                <div class="chart-box">
+                    <h4>Budget vs. Expenses</h4>
+                    <canvas id="budgetBarChart"></canvas>
+                </div>
+                <div class="chart-box">
+                    <h4>Expenses by Category</h4>
+                    <canvas id="expensePieChart"></canvas>
+                </div>
+            </div>
             <h3 style="margin-top: 25px;">Recent History</h3>
             <ul id="recentExpensesList">
                 <li class="placeholder">No expenses loaded...</li>
             </ul>
         </div>
-
-    </div>
+        </div>
     
     <div id="newProjectModal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -307,4 +319,3 @@
 </body>
 
 </html>
-
