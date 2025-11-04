@@ -18,7 +18,21 @@ const loginForm = document.getElementById('loginForm');
 const messageContainer = document.getElementById('message-container');
 const continueBtn = document.getElementById('continueBtn');
 
-// --- NEW: Add click listener for the continue button ---
+// --- NEW: Storage Tester ---
+// This runs immediately to see if storage is blocked (e.g., Private Browsing)
+try {
+    localStorage.setItem('__test__', '1');
+    localStorage.removeItem('__test__');
+} catch (e) {
+    // Storage is blocked! Show an error and hide the form.
+    messageContainer.textContent = 'Error: Your browser is blocking storage. Please try again in a non-private (normal) browser tab.';
+    messageContainer.className = 'error';
+    loginForm.style.display = 'none';
+}
+// --- End of Storage Tester ---
+
+
+// --- Click listener for the continue button ---
 continueBtn.addEventListener('click', () => {
     // Manually navigate to the dashboard
     window.location.href = '/'; 
@@ -80,5 +94,4 @@ loginForm.addEventListener('submit', async (e) => {
         messageContainer.className = 'error';
         hideSpinner(submitButton); // Only hide spinner on failure
     }
-    // We no longer use a 'finally' block, as the button stays hidden on success
 });
