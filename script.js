@@ -1127,4 +1127,13 @@ if (deleteProjectBtn) {
 // --- 9. INITIALIZATION ---
 
 window.onload = loadProjects;
+// --- LOGOUT BUTTON LOGIC ---
+const logoutBtn = document.getElementById('logoutBtn');
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+        sessionStorage.removeItem('isLoggedIn'); // Clear the login session
+        window.location.href = 'login.html'; // Go back to login page
+    });
+}
+// ---------------------------
 
