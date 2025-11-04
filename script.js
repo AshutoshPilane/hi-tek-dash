@@ -1,16 +1,9 @@
-// --- AUTHENTICATION CHECK (USING COOKIES) ---
+// --- HELPER FUNCTION TO READ COOKIES ---
 function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
     if (parts.length === 2) return parts.pop().split(';').shift();
 }
-
-if (getCookie('isLoggedIn') !== 'true') {
-    // User is not logged in. Redirect.
-    window.location.href = '/login.html';
-}
-// ----------------------------
-
 
 // ==============================================================================
 // (Rest of your script.js file)
@@ -143,6 +136,8 @@ const projectSelector = document.getElementById('projectSelector');
 const currentProjectNameDisplay = document.getElementById('currentProjectName');
 
 async function loadProjects() {
+    // This is the main function to load the dashboard data
+    // It's called *after* a successful login
     const result = await sendDataToSheet('Projects', 'GET');
     if (result.status === 'success' && result.data) {
         allProjects = result.data;
@@ -889,16 +884,84 @@ if (deleteProjectBtn) {
     });
 }
 
-// --- 9. INITIALIZATION ---
-window.onload = loadProjects;
+// --- 9. INITIALIZATION AND AUTH ---
 
-// --- LOGOUT BUTTON LOGIC (MODIFIED TO USE COOKIES) ---
+// Get references to the main containers
+const loginContainer = document.getElementById('login-container');
+const dashboardContainer = document.getElementById('dashboard-container');
+
+// --- NEW: Login Form Logic (moved from login.js) ---
+const loginForm = document.getElementById('loginForm');
+if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitButton = loginForm.querySelector('button[type="submit"]');
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const messageContainer = document.getElementById('message-container');
+        
+        messageContainer.style.display = 'none';
+        messageContainer.textContent = '';
+        showSpinner(submitButton);
+
+        try {
+            const result = await sendDataToSheet(null, 'LOGIN', {
+                username: username,
+                password: password
+            });
+
+            if (result.status === 'success') {
+                // 1. Set the cookie
+                document.cookie = "isLoggedIn=true; path=/; max-age=3600; SameSite=Strict";
+                
+                // 2. Hide login, show dashboard
+                loginContainer.style.display = 'none';
+                dashboardContainer.style.display = 'block';
+
+                // 3. Load the dashboard data
+                loadProjects(); 
+            } else {
+                messageContainer.textContent = result.message;
+                messageContainer.className = 'show';
+                hideSpinner(submitButton);
+            }
+            
+        } catch (error) {
+            messageContainer.textContent = 'Failed to connect to API. Check network.';
+            messageContainer.className = 'show';
+            hideSpinner(submitButton);
+        }
+    });
+}
+
+// --- NEW: Logout Button Logic ---
 const logoutBtn = document.getElementById('logoutBtn');
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
-        // Delete the cookie by setting its max-age to 0
+        // Delete the cookie
         document.cookie = "isLoggedIn=; path=/; max-age=0; SameSite=Strict"; 
-        window.location.href = '/login.html'; // Go back to login page
+        
+        // Hide dashboard, show login
+        dashboardContainer.style.display = 'none';
+        loginContainer.style.display = 'flex'; // Use flex to center it
+        
+        // Clear old data
+        resetDashboard();
     });
 }
-// ---------------------------
+
+// --- NEW: Page Load Authentication Check ---
+window.onload = () => {
+    // Check if the user is logged in
+    if (getCookie('isLoggedIn') === 'true') {
+        // Show dashboard and load data
+        loginContainer.style.display = 'none';
+        dashboardContainer.style.display = 'block';
+        loadProjects();
+    } else {
+        // Show login form
+        loginContainer.style.display = 'flex'; // Use flex to center it
+        dashboardContainer.style.display = 'none';
+    }
+};
