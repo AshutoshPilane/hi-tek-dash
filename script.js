@@ -225,31 +225,57 @@ async function updateDashboard(projectID) {
     
     updateProjectDetails(projectData);
     
+    // 2. Load Tasks and Update Task Tracker / Progress KPI
     const taskResult = await sendDataToSheet('Tasks', 'GET', { ProjectID: projectID });
     if (taskResult.status === 'success') {
-        currentTasksData = taskResult.data; 
-        renderTasks(currentTasksData);
+
+        // ====================================================================
+        // --- CRITICAL FIX: Sort tasks by the number in their TaskID ---
+        // This stops the list from appearing in a "random" order
+        const sortedTasks = taskResult.data.sort((a, b) => {
+            // Helper to extract the number from "PROJ-T1", "PROJ-T10", etc.
+            const getTaskNum = (taskID) => {
+                if (!taskID) return 0;
+                // Looks for the number after "-T"
+                const match = taskID.match(/-T(\d+)$/); 
+                return match ? parseInt(match[1], 10) : 0;
+            };
+            
+            const numA = getTaskNum(a.TaskID);
+            const numB = getTaskNum(b.TaskID);
+            
+            return numA - numB; // Sorts numerically (1, 2, 3... 10, 11)
+        });
+        // ====================================================================
+
+        currentTasksData = sortedTasks; // Store the SORTED data
+        renderTasks(currentTasksData); // Render the SORTED data
         calculateTaskKPI(currentTasksData);
     } else {
+        console.error('Failed to load tasks:', taskResult.message);
         currentTasksData = [];
         renderTasks([]);
     }
 
+    // 3. Load Materials and Update Material Tracker / Material KPI
     const materialResult = await sendDataToSheet('Materials', 'GET', { ProjectID: projectID });
     if (materialResult.status === 'success') {
-        currentMaterialsData = materialResult.data; 
+        currentMaterialsData = materialResult.data; // Store for lookups
         renderMaterials(currentMaterialsData);
         calculateMaterialKPI(currentMaterialsData);
     } else {
+        console.error('Failed to load materials:', materialResult.message);
         currentMaterialsData = [];
         renderMaterials([]);
     }
 
+    // 4. Load Expenses and Update Expense Tracker / Expense KPI
     const expenseResult = await sendDataToSheet('Expenses', 'GET', { ProjectID: projectID });
     if (expenseResult.status === 'success') {
         renderExpenses(expenseResult.data);
         calculateExpenseKPI(expenseResult.data);
     } else {
+        console.error('Failed to load expenses:', expenseResult.message);
         renderExpenses([]);
     }
 }
@@ -862,6 +888,7 @@ if (deleteProjectBtn) {
 // --- 9. INITIALIZATION ---
 
 window.onload = loadProjects;
+
 
 
 
