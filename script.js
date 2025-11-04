@@ -1,30 +1,21 @@
-// --- AUTHENTICATION CHECK ---
-// This runs first. If not logged in, redirect to login page.
-// --- AUTHENTICATION CHECK (v2 - iOS Fix) ---
-const urlParams = new URLSearchParams(window.location.search);
-const fromLogin = urlParams.has('fromLogin');
-const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+// --- NEW HELPER FUNCTION TO READ COOKIES ---
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+}
+// -----------------------------------------
 
-if (isLoggedIn) {
-    // User is already logged in. All good.
-    // Clean the URL just in case
-    if (fromLogin) {
-        window.history.replaceState({}, document.title, "/");
-    }
-} else if (fromLogin) {
-    // User just arrived from a successful login, but localStorage might be slow/blocked.
-    // Set it NOW on this page, then clean the URL.
-    localStorage.setItem('isLoggedIn', 'true');
-    window.history.replaceState({}, document.title, "/");
-} else {
-    // User is not logged in and did not just arrive from login page.
-    // Redirect to login.
+// --- AUTHENTICATION CHECK (MODIFIED TO USE COOKIES) ---
+if (getCookie('isLoggedIn') !== 'true') {
+    // User is not logged in. Redirect.
     window.location.href = '/login.html';
 }
 // ----------------------------
-// ----------------------------
+
+
 // ==============================================================================
-// script.js: FINAL OPERATIONAL VERSION (Fixed Sequential Tasks & Delete Bug)
+// script.js: FINAL OPERATIONAL VERSION
 // ==============================================================================
 // Vercel, please update! (v2)
 // 🎯 CRITICAL: USING THE LOCAL PROXY PATH (/api)
@@ -37,12 +28,9 @@ let currentTasksData = []; // Stores the full task data for the selected project
 let expensePieChart = null; // Holds the pie chart instance
 let budgetBarChart = null; // Holds the bar chart instance
 
-// --- DUMMY FUNCTION for error/success messages (Required for error-free execution) ---
 // --- NEW FUNCTION: Replaces alert() with Toastify notifications ---
 function showMessageBox(message, type) {
     console.log(`[Message Box | ${type.toUpperCase()}]: ${message}`);
-
-    // Determine background color based on type
     let backgroundColor;
     switch (type) {
         case 'success':
@@ -57,39 +45,33 @@ function showMessageBox(message, type) {
         default:
             backgroundColor = "#007bff"; // Blue (default)
     }
-
     Toastify({
         text: message,
-        duration: 3000, // 3 seconds
+        duration: 3000,
         close: true,
-        gravity: "top", // `top` or `bottom`
-        position: "right", // `left`, `center` or `right`
-        stopOnFocus: true, // Prevents dismissing if user is hovering
-        style: {
-            background: backgroundColor,
-        }
+        gravity: "top",
+        position: "right",
+        stopOnFocus: true,
+        style: { background: backgroundColor }
     }).showToast();
 }
 
-// --- NEW HELPER FUNCTION: Date Formatting Fix for ISO Strings (Issue 1 Fix) ---
+// --- Date Formatting Fix ---
 function formatDate(isoDateString) {
     if (!isoDateString) return 'N/A';
-    // If it's a simple YYYY-MM-DD string already, return it
     if (isoDateString.length === 10 && isoDateString.includes('-')) {
         return isoDateString;
     }
     try {
         const date = new Date(isoDateString);
-        // Format to YYYY-MM-DD
         return date.toISOString().split('T')[0];
     } catch (e) {
-        return isoDateString; // Return original if parsing fails
+        return isoDateString;
     }
 }
 
-// --- NEW HELPER FUNCTION: Number Formatting for INR (₹) ---
+// --- Number Formatting for INR (₹) ---
 function formatNumber(num) {
-    // Ensure num is treated as a number, defaulting to 0
     const number = parseFloat(num) || 0;
     return new Intl.NumberFormat('en-IN', { 
         style: 'decimal', 
@@ -98,14 +80,13 @@ function formatNumber(num) {
     }).format(number);
 }
 
-// --- Spinner Helper Functions (NEW) ---
+// --- Spinner Helper Functions ---
 function showSpinner(button) {
     button.disabled = true;
     const spinner = document.createElement('span');
     spinner.className = 'btn-spinner';
     button.appendChild(spinner);
 }
-
 function hideSpinner(button) {
     button.disabled = false;
     const spinner = button.querySelector('.btn-spinner');
@@ -142,53 +123,34 @@ const HI_TEK_TASKS_MAP = [
     { Name: '23. Submit No-Objection Letter', Responsible: 'Project Manager' }
 ];
 
-
 // --- 2. API COMMUNICATION ---
-
-/**
- * Sends a request to the Google Sheets API via the Vercel proxy.
- */
 async function sendDataToSheet(sheetName, method, data = {}) {
     const payload = { sheetName, method, ...data };
-    
     try {
         const response = await fetch(SHEET_API_URL, {
-            method: 'POST', // All requests to GAS doPost are technically POST
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
-
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-
-        const result = await response.json();
-        return result;
-
+        return await response.json();
     } catch (error) {
         console.error(`Error during API call for ${sheetName}/${method}:`, error);
         return { status: 'error', message: error.message };
     }
 }
 
-
 // --- 3. DATA LOADING AND SELECTION ---
-
 const projectSelector = document.getElementById('projectSelector');
 const currentProjectNameDisplay = document.getElementById('currentProjectName');
 
-/**
- * Loads all projects, populates the selector, and initializes the dashboard.
- */
 async function loadProjects() {
     const result = await sendDataToSheet('Projects', 'GET');
-
     if (result.status === 'success' && result.data) {
         allProjects = result.data;
         populateProjectSelector(allProjects);
-
         let projectToLoadID = null;
         if (allProjects.length > 0) {
             if (currentProjectID && allProjects.some(p => p.ProjectID === currentProjectID)) {
@@ -197,9 +159,7 @@ async function loadProjects() {
                 projectToLoadID = allProjects[0].ProjectID;
             }
         }
-        
         currentProjectID = projectToLoadID;
-        
         if (projectToLoadID) {
             if (projectSelector) {
                  projectSelector.value = projectToLoadID;
@@ -208,7 +168,6 @@ async function loadProjects() {
         } else {
             resetDashboard();
         }
-
     } else {
         console.error('Failed to load projects:', result.message);
         resetDashboard();
@@ -216,18 +175,13 @@ async function loadProjects() {
     }
 }
 
-/**
- * Populates the project selection dropdown.
- */
 function populateProjectSelector(projects) {
     if (projectSelector) {
         projectSelector.innerHTML = ''; 
-
         if (projects.length === 0) {
             projectSelector.innerHTML = '<option value="">No Projects Found</option>';
             return;
         }
-
         projects.forEach(project => {
             const option = document.createElement('option');
             option.value = project.ProjectID;
@@ -237,9 +191,6 @@ function populateProjectSelector(projects) {
     }
 }
 
-/**
- * Handles the selection change from the dropdown.
- */
 if (projectSelector) {
     projectSelector.addEventListener('change', async (e) => {
         currentProjectID = e.target.value;
@@ -251,10 +202,7 @@ if (projectSelector) {
     });
 }
 
-
 // --- 4. DASHBOARD UPDATING AND KPI CALCULATION ---
-
-// MODIFIED: Added chart destroy calls
 function resetDashboard() {
     currentProjectNameDisplay.textContent = 'Select a Project';
     const kpis = ['kpi-days-spent', 'kpi-days-left', 'kpi-progress', 'kpi-material-progress', 'kpi-work-order', 'kpi-total-expenses'];
@@ -281,7 +229,6 @@ function resetDashboard() {
     const recentExpensesList = document.getElementById('recentExpensesList');
     if(recentExpensesList) recentExpensesList.innerHTML = '<li class="placeholder">No expenses loaded...</li>';
 
-    // NEW: Destroy charts
     if (expensePieChart) {
         expensePieChart.destroy();
         expensePieChart = null;
@@ -292,18 +239,14 @@ function resetDashboard() {
     }
 }
 
-// MODIFIED: Added chart-drawing calls
 async function updateDashboard(projectID) {
     if (!projectID) return resetDashboard();
-
     const projectData = allProjects.find(p => p.ProjectID === projectID);
     if (!projectData) return resetDashboard();
 
     currentProjectNameDisplay.textContent = projectData.Name || 'N/A';
-    
     updateProjectDetails(projectData);
     
-    // 2. Load Tasks
     const taskResult = await sendDataToSheet('Tasks', 'GET', { ProjectID: projectID });
     if (taskResult.status === 'success') {
         const sortedTasks = taskResult.data.sort((a, b) => {
@@ -316,7 +259,6 @@ async function updateDashboard(projectID) {
             const numB = getTaskNum(b.TaskID);
             return numA - numB;
         });
-
         currentTasksData = sortedTasks; 
         renderTasks(currentTasksData);
         calculateTaskKPI(currentTasksData);
@@ -326,7 +268,6 @@ async function updateDashboard(projectID) {
         renderTasks([]);
     }
 
-    // 3. Load Materials
     const materialResult = await sendDataToSheet('Materials', 'GET', { ProjectID: projectID });
     if (materialResult.status === 'success') {
         currentMaterialsData = materialResult.data;
@@ -338,23 +279,15 @@ async function updateDashboard(projectID) {
         renderMaterials([]);
     }
 
-    // 4. Load Expenses (and render charts)
     const expenseResult = await sendDataToSheet('Expenses', 'GET', { ProjectID: projectID });
     if (expenseResult.status === 'success') {
         renderExpenses(expenseResult.data);
         calculateExpenseKPI(expenseResult.data);
-
-        // --- NEW: CALL CHART FUNCTIONS ---
-        // Pass the loaded project data and expense data
         renderExpenseChart(expenseResult.data);
         renderBudgetChart(projectData, expenseResult.data);
-        // ---------------------------------
-        
     } else {
         console.error('Failed to load expenses:', expenseResult.message);
         renderExpenses([]);
-        
-        // --- NEW: Clear charts on failure ---
         if (expensePieChart) expensePieChart.destroy();
         if (budgetBarChart) budgetBarChart.destroy();
         renderExpenseChart([]);
@@ -362,14 +295,9 @@ async function updateDashboard(projectID) {
     }
 }
 
-
-/**
- * Updates the Project Details panel and related date/value KPIs.
- */
 function updateProjectDetails(project) {
     const startDate = formatDate(project.StartDate);
     const deadline = formatDate(project.Deadline);
-
     document.getElementById('display-name').textContent = project.Name || 'N/A';
     document.getElementById('display-start-date').textContent = startDate;
     document.getElementById('display-deadline').textContent = deadline;
@@ -399,13 +327,12 @@ function updateProjectDetails(project) {
         const timeRemaining = dateDeadline.getTime() - dateToday.getTime();
         const daysLeft = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
         const kpiDaysLeftElement = document.getElementById('kpi-days-left');
-        
         if (daysLeft < 0) {
             kpiDaysLeftElement.textContent = 'OVERDUE!';
-            kpiDaysLeftElement.classList.add('overdue'); // FIX: Add class
+            kpiDaysLeftElement.classList.add('overdue');
         } else {
             kpiDaysLeftElement.textContent = `${daysLeft} days left`;
-            kpiDaysLeftElement.classList.remove('overdue'); // FIX: Remove class
+            kpiDaysLeftElement.classList.remove('overdue');
         }
     } else {
         document.getElementById('kpi-days-left').textContent = 'N/A';
@@ -413,54 +340,38 @@ function updateProjectDetails(project) {
 }
 
 // --- 5. TASK TRACKER LOGIC ---
-
 function renderTasks(tasks) {
     const taskTableBody = document.getElementById('taskTableBody');
     if (!taskTableBody) return;
-    
     taskTableBody.innerHTML = '';
     const taskSelector = document.getElementById('taskId');
     if (taskSelector) taskSelector.innerHTML = '<option value="">-- Select a Task --</option>'; 
-
     if (tasks.length === 0) {
         taskTableBody.innerHTML = '<tr><td colspan="5">No tasks found for this project.</td></tr>';
         return;
     }
-
-    // NEW: Logic for sequential task unlocking
     let previousTaskComplete = true;
-
     tasks.forEach(task => {
         const row = taskTableBody.insertRow();
         const progressValue = parseFloat(task.Progress) || 0; 
         const dueDateText = formatDate(task.DueDate); 
         const status = task.Status || (progressValue === 100 ? 'Completed' : (progressValue > 0 ? 'In Progress' : 'Pending'));
         const statusClass = status.toLowerCase().replace(' ', '-');
-
         row.insertCell().textContent = task.TaskName;
         row.insertCell().textContent = task.Responsible || 'N/A';
-        
         const progressCell = row.insertCell();
         progressCell.innerHTML = `<span class="progress-bar-wrap"><span class="progress-bar" style="width: ${progressValue}%;"></span></span> ${progressValue}%`;
-
         row.insertCell().textContent = dueDateText;
-        
         const statusCell = row.insertCell();
         statusCell.innerHTML = `<span class="status-badge status-${statusClass}">${status}</span>`;
-
-        // Populate the dropdown selector
         if (taskSelector) {
             const option = document.createElement('option');
             option.value = task.TaskID;
             option.textContent = `${task.TaskName} (${progressValue}%)`;
-            
-            // NEW: Disable task if previous one is not 100%
             if (!previousTaskComplete) {
                 option.disabled = true;
             }
             taskSelector.appendChild(option);
-            
-            // Update flag for the *next* iteration
             if (progressValue < 100) {
                 previousTaskComplete = false;
             }
@@ -471,53 +382,41 @@ function renderTasks(tasks) {
 function calculateTaskKPI(tasks) {
     const kpiProgressElement = document.getElementById('kpi-progress');
     if (!kpiProgressElement) return;
-
     if (tasks.length === 0) {
         kpiProgressElement.textContent = '0%';
         return;
     }
-    
     const totalProgress = tasks.reduce((sum, task) => sum + (parseFloat(task.Progress) || 0), 0);
     const averageProgress = Math.round(totalProgress / tasks.length);
     kpiProgressElement.textContent = `${averageProgress}%`;
 }
 
-
-// NEW: Event listener to auto-populate progress dropdown when a task is selected
 const taskSelector = document.getElementById('taskId');
 if (taskSelector) {
     taskSelector.addEventListener('change', (e) => {
         const selectedTaskID = e.target.value;
         const taskProgressDropdown = document.getElementById('taskProgress');
-        
         if (!selectedTaskID) {
             taskProgressDropdown.value = "0";
             return;
         }
-
         const task = currentTasksData.find(t => t.TaskID === selectedTaskID);
         if (task) {
             const currentProgress = parseFloat(task.Progress) || 0;
-            // Round to nearest 25% increment
             const nearest25 = Math.round(currentProgress / 25) * 25;
             taskProgressDropdown.value = nearest25.toString();
         }
     });
 }
 
-// MODIFIED: Added spinner logic
 const updateTaskForm = document.getElementById('updateTaskForm');
 if (updateTaskForm) {
     updateTaskForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
-        // Get the submit button from the form
         const submitButton = updateTaskForm.querySelector('button[type="submit"]');
-
         const taskID = document.getElementById('taskId').value;
         const progress = document.getElementById('taskProgress').value;
         const dueDate = document.getElementById('taskDue').value;
-
         if (!currentProjectID) {
             showMessageBox('Please select a project first.', 'alert');
             return;
@@ -526,13 +425,9 @@ if (updateTaskForm) {
             showMessageBox('Please select a task to update.', 'alert');
             return;
         }
-        
-        // --- Show spinner ---
         showSpinner(submitButton);
-
         const progressValue = parseFloat(progress) || 0;
         const status = progressValue === 100 ? 'Completed' : (progressValue === 0 ? 'Pending' : 'In Progress');
-        
         const updatedData = {
             ProjectID: currentProjectID,
             TaskID: taskID,
@@ -540,10 +435,8 @@ if (updateTaskForm) {
             DueDate: dueDate,
             Status: status,
         };
-
         try {
             const result = await sendDataToSheet('Tasks', 'PUT', updatedData);
-
             if (result.status === 'success') {
                 await updateDashboard(currentProjectID);
                 showMessageBox(`Task updated successfully!`, 'success');
@@ -553,46 +446,35 @@ if (updateTaskForm) {
         } catch (error) {
             showMessageBox(`An unexpected error occurred: ${error.message}`, 'error');
         } finally {
-            // --- Hide spinner ---
             hideSpinner(submitButton);
         }
     });
 }
 
-
 // --- 6. MATERIAL TRACKER LOGIC ---
-
 function renderMaterials(materials) {
     const materialTableBody = document.getElementById('materialTableBody');
     if (!materialTableBody) return;
-    
     materialTableBody.innerHTML = '';
     const materialItemIdSelector = document.getElementById('materialItemId');
     if (materialItemIdSelector) materialItemIdSelector.innerHTML = '<option value="">-- Select Existing Material --</option>';
-
     if (materials.length === 0) {
         materialTableBody.innerHTML = '<tr><td colspan="5">No materials loaded for this project.</td></tr>';
         return;
     }
-    
     materials.forEach((material) => {
         const required = parseFloat(material.RequiredQuantity) || 0; 
         const dispatched = parseFloat(material.DispatchedQuantity) || 0;
-        
         const balance = required - dispatched;
         const progress = required > 0 ? Math.round((dispatched / required) * 100) : 0;
         const unit = material.Unit || 'Unit';
-
         const row = materialTableBody.insertRow();
-        
         row.insertCell().textContent = material.MaterialName;
         row.insertCell().textContent = `${formatNumber(required)} ${unit}`;
         row.insertCell().textContent = `${formatNumber(dispatched)} ${unit}`;
         row.insertCell().textContent = `${formatNumber(balance)} ${unit}`;
-        
         const progressCell = row.insertCell();
         progressCell.innerHTML = `<span class="progress-bar-wrap"><span class="progress-bar ${progress === 100 ? 'bg-success' : ''}" style="width: ${progress}%;"></span></span> ${progress}%`;
-
         if (materialItemIdSelector) {
             const option = document.createElement('option');
             option.value = material.MaterialName; 
@@ -605,15 +487,12 @@ function renderMaterials(materials) {
 function calculateMaterialKPI(materials) {
     const kpiMaterialProgressElement = document.getElementById('kpi-material-progress');
     if (!kpiMaterialProgressElement) return;
-
     if (materials.length === 0) {
         kpiMaterialProgressElement.textContent = '0% Dispatched';
         return;
     }
-    
     const totalRequired = materials.reduce((sum, m) => sum + (parseFloat(m.RequiredQuantity) || 0), 0);
     const totalDispatched = materials.reduce((sum, m) => sum + (parseFloat(m.DispatchedQuantity) || 0), 0);
-
     let overallProgress = 0;
     if (totalRequired > 0) {
         overallProgress = Math.round((totalDispatched / totalRequired) * 100);
@@ -621,32 +500,23 @@ function calculateMaterialKPI(materials) {
     kpiMaterialProgressElement.textContent = `${overallProgress}% Dispatched`;
 }
 
-
-// MODIFIED: Added spinner logic
 const recordDispatchForm = document.getElementById('recordDispatchForm');
 if (recordDispatchForm) {
     recordDispatchForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        
-        // Get the submit button
         const submitButton = recordDispatchForm.querySelector('button[type="submit"]');
-        
         if (!currentProjectID) {
             showMessageBox('Please select a project first.', 'alert');
             return;
         }
-
         const materialItemId = document.getElementById('materialItemId').value;
         const newMaterialName = document.getElementById('newMaterialName').value.trim();
         const requiredQuantity = parseFloat(document.getElementById('requiredQuantity').value) || 0;
         const dispatchQuantity = parseFloat(document.getElementById('dispatchQuantity').value) || 0;
         const materialUnit = document.getElementById('materialUnit').value;
-
         let actionType = newMaterialName ? 'POST' : 'PUT';
         let payload = {};
-
         if (materialItemId) {
-            // Case 1: Updating an existing material (Dispatch)
             const existingMaterial = currentMaterialsData.find(m => m.MaterialName === materialItemId);
             if (!existingMaterial) {
                 showMessageBox('Error: Existing material not found.', 'error');
@@ -654,16 +524,13 @@ if (recordDispatchForm) {
             }
             const currentDispatched = parseFloat(existingMaterial.DispatchedQuantity) || 0;
             const newTotalDispatched = currentDispatched + dispatchQuantity;
-
             payload = {
                 ProjectID: currentProjectID,
                 MaterialName: materialItemId,
                 DispatchedQuantity: newTotalDispatched.toString()
             };
             actionType = 'PUT';
-
         } else if (newMaterialName) {
-            // Case 2: Adding a new material (POST)
             payload = {
                 ProjectID: currentProjectID,
                 MaterialName: newMaterialName,
@@ -672,18 +539,13 @@ if (recordDispatchForm) {
                 Unit: materialUnit
             };
             actionType = 'POST';
-
         } else {
             showMessageBox('Please select an existing material or enter a new one.', 'alert');
             return;
         }
-
-        // --- Show spinner ---
         showSpinner(submitButton);
-
         try {
             const result = await sendDataToSheet('Materials', actionType, payload);
-
             if (result.status === 'success') {
                 await updateDashboard(currentProjectID);
                 recordDispatchForm.reset();
@@ -694,28 +556,21 @@ if (recordDispatchForm) {
         } catch (error) {
             showMessageBox(`An unexpected error occurred: ${error.message}`, 'error');
         } finally {
-            // --- Hide spinner ---
             hideSpinner(submitButton);
         }
     });
 }
 
-
 // --- 7. EXPENSE TRACKER LOGIC ---
-
 function renderExpenses(expenses) {
     const recentExpensesList = document.getElementById('recentExpensesList');
     if (!recentExpensesList) return;
-    
     recentExpensesList.innerHTML = '';
-
     if (expenses.length === 0) {
         recentExpensesList.innerHTML = '<li class="placeholder">No expenses loaded...</li>';
         return;
     }
-    
     expenses.sort((a, b) => new Date(b.Date) - new Date(a.Date));
-    
     expenses.slice(0, 10).forEach(expense => {
         const li = document.createElement('li');
         const expenseDate = formatDate(expense.Date);
@@ -729,73 +584,43 @@ function calculateExpenseKPI(expenses) {
     document.getElementById('kpi-total-expenses').textContent = `₹ ${formatNumber(totalExpenses)}`;
 }
 
-// --- NEW: CHART DRAWING FUNCTIONS ---
-
-/**
- * Draws the "Expenses by Category" pie chart.
- */
 function renderExpenseChart(expenses) {
     const ctx = document.getElementById('expensePieChart');
-    if (!ctx) return; // Exit if canvas not found
-
-    // 1. Process the data
-    const categories = {}; // e.g., { Material: 1000, Labor: 500 }
+    if (!ctx) return;
+    const categories = {};
     expenses.forEach(e => {
         const amount = parseFloat(e.Amount) || 0;
         categories[e.Category] = (categories[e.Category] || 0) + amount;
     });
-
-    // 2. Destroy the old chart if it exists (prevents bugs)
     if (expensePieChart) {
         expensePieChart.destroy();
     }
-
-    // 3. Create the new chart
     expensePieChart = new Chart(ctx.getContext('2d'), {
         type: 'pie',
         data: {
             labels: Object.keys(categories),
             datasets: [{
                 data: Object.values(categories),
-                backgroundColor: [
-                    '#007bff', // Blue
-                    '#28a745', // Green
-                    '#ffc107', // Yellow
-                    '#dc3545', // Red
-                    '#6c757d'  // Gray
-                ],
+                backgroundColor: ['#007bff', '#28a745', '#ffc107', '#dc3545', '#6c757d'],
                 borderWidth: 1
             }]
         },
         options: {
             responsive: true,
-            plugins: {
-                legend: {
-                    position: 'top',
-                }
-            }
+            plugins: { legend: { position: 'top' } }
         }
     });
 }
 
-/**
- * Draws the "Budget vs. Expenses" bar chart.
- */
 function renderBudgetChart(project, expenses) {
     const ctx = document.getElementById('budgetBarChart');
-    if (!ctx) return; // Exit if canvas not found
-
-    // 1. Process the data
+    if (!ctx) return;
     const budget = parseFloat(project.Budget) || 0;
     const totalExpenses = expenses.reduce((sum, e) => sum + (parseFloat(e.Amount) || 0), 0);
     const remaining = budget - totalExpenses;
-
-    // 2. Destroy the old chart if it exists
     if (budgetBarChart) {
         budgetBarChart.destroy();
     }
-
-    // 3. Create the new chart
     budgetBarChart = new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: {
@@ -803,45 +628,27 @@ function renderBudgetChart(project, expenses) {
             datasets: [{
                 label: 'Amount (INR)',
                 data: [budget, totalExpenses, remaining],
-                backgroundColor: [
-                    '#007bff', // Blue
-                    '#ffc107', // Yellow
-                    remaining < 0 ? '#dc3545' : '#28a745' // Red if over budget, Green if not
-                ],
+                backgroundColor: ['#007bff', '#ffc107', remaining < 0 ? '#dc3545' : '#28a745'],
                 borderWidth: 1
             }]
         },
         options: {
             responsive: true,
-            plugins: {
-                legend: {
-                    display: false // Hide legend for simple bar chart
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
         }
     });
 }
 
-
-// MODIFIED: Added spinner logic
 const expenseEntryForm = document.getElementById('expenseEntryForm');
 if (expenseEntryForm) {
     expenseEntryForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-
-        // Get the submit button
         const submitButton = expenseEntryForm.querySelector('button[type="submit"]');
-
         if (!currentProjectID) {
             showMessageBox('Please select a project first.', 'alert');
             return;
         }
-
         const newExpenseData = {
             ProjectID: currentProjectID,
             Date: document.getElementById('expenseDate').value,
@@ -850,18 +657,13 @@ if (expenseEntryForm) {
             Category: document.getElementById('expenseCategory').value,
             RecordedBy: 'User (App)'
         };
-
         if (!newExpenseData.Date || !newExpenseData.Description || newExpenseData.Amount <= 0) {
             showMessageBox('Please fill in all required expense fields.', 'alert');
             return;
         }
-        
-        // --- Show spinner ---
         showSpinner(submitButton);
-
         try {
             const result = await sendDataToSheet('Expenses', 'POST', newExpenseData);
-
             if (result.status === 'success') {
                 await updateDashboard(currentProjectID);
                 expenseEntryForm.reset();
@@ -872,15 +674,12 @@ if (expenseEntryForm) {
         } catch (error) {
             showMessageBox(`An unexpected error occurred: ${error.message}`, 'error');
         } finally {
-            // --- Hide spinner ---
             hideSpinner(submitButton);
         }
     });
 }
 
-
 // --- 8. PROJECT MANAGEMENT (NEW, EDIT, DELETE) ---
-
 const newProjectModal = document.getElementById('newProjectModal');
 const addProjectBtn = document.getElementById('addProjectBtn');
 const closeModalButtons = document.querySelectorAll('.modal .close-button');
@@ -890,7 +689,6 @@ if (addProjectBtn) {
         if(newProjectModal) newProjectModal.style.display = 'flex';
     });
 }
-
 closeModalButtons.forEach(btn => {
     btn.addEventListener('click', () => {
         if(newProjectModal) newProjectModal.style.display = 'none';
@@ -900,32 +698,23 @@ closeModalButtons.forEach(btn => {
         if(projectDetailsDisplay) projectDetailsDisplay.style.display = 'block';
     });
 });
-
 window.addEventListener('click', (event) => {
     if (event.target === newProjectModal) {
         if(newProjectModal) newProjectModal.style.display = 'none';
     }
 });
 
-
-// MODIFIED: Added spinner logic
 const newProjectForm = document.getElementById('newProjectForm');
 if (newProjectForm) {
     newProjectForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-
-        // Get the submit button
         const submitButton = newProjectForm.querySelector('button[type="submit"]');
-
         const newProjectID = document.getElementById('newProjectID').value.trim();
         if (!newProjectID) {
             showMessageBox('Project ID cannot be empty.', 'alert');
             return;
         }
-        
-        // --- Show spinner ---
         showSpinner(submitButton);
-
         const projectData = {
             ProjectID: newProjectID,
             Name: document.getElementById('newProjectName').value,
@@ -941,7 +730,6 @@ if (newProjectForm) {
             Contact2: document.getElementById('newContact2').value,
             CreationDate: new Date().toISOString().split('T')[0]
         };
-
         const initialTasks = HI_TEK_TASKS_MAP.map((task, index) => ({
             ProjectID: newProjectID,
             TaskID: `${newProjectID}-T${index + 1}`,
@@ -951,23 +739,17 @@ if (newProjectForm) {
             Progress: '0', 
             Status: 'Pending',
         }));
-
         try {
             const projectResult = await sendDataToSheet('Projects', 'POST', projectData);
-
             if (projectResult.status !== 'success') {
                  showMessageBox(`Failed to create project: ${projectResult.message || 'Unknown error.'}`, 'error');
-                 // Don't hide spinner here, let finally do it
                  throw new Error("Project creation failed");
             }
-
             const taskPromises = initialTasks.map(task => 
                 sendDataToSheet('Tasks', 'POST', task)
             );
             const taskResults = await Promise.all(taskPromises);
-            
             const failedTasks = taskResults.filter(r => r.status !== 'success');
-            
             if (failedTasks.length === 0) {
                 if(newProjectModal) newProjectModal.style.display = 'none';
                 if(newProjectForm) newProjectForm.reset();
@@ -983,15 +765,12 @@ if (newProjectForm) {
             }
         } catch (error) {
             console.error("Error in new project submission:", error);
-            // Error message already shown, just log
         } finally {
-            // --- Hide spinner ---
             hideSpinner(submitButton);
         }
     });
 }
 
-// --- Edit Project Details Logic ---
 const editProjectDetailsBtn = document.getElementById('editProjectDetailsBtn');
 const saveProjectDetailsBtn = document.getElementById('saveProjectDetailsBtn');
 const cancelEditBtn = document.getElementById('cancelEditBtn');
@@ -1004,17 +783,14 @@ function toggleEditMode(enable) {
         edit.style.display = enable ? 'block' : 'none';
     }
 }
-
 if (editProjectDetailsBtn) {
     editProjectDetailsBtn.addEventListener('click', () => {
         if (!currentProjectID) {
             showMessageBox('Please select a project to edit.', 'alert');
             return;
         }
-
         const project = allProjects.find(p => p.ProjectID === currentProjectID);
         if (!project) return;
-        
         document.getElementById('editProjectID').value = project.ProjectID;
         document.getElementById('editProjectName').value = project.Name || '';
         document.getElementById('editClientName').value = project.ClientName || '';
@@ -1027,25 +803,19 @@ if (editProjectDetailsBtn) {
         document.getElementById('editEngineers').value = project.Engineers || '';
         document.getElementById('editContact1').value = project.Contact1 || '';
         document.getElementById('editContact2').value = project.Contact2 || '';
-        
         toggleEditMode(true);
     });
 }
-
 if (cancelEditBtn) {
     cancelEditBtn.addEventListener('click', () => {
         toggleEditMode(false);
     });
 }
 
-// MODIFIED: Added spinner logic
 if (saveProjectDetailsBtn) {
     saveProjectDetailsBtn.addEventListener('click', async () => {
         if (!currentProjectID) return;
-
-        // --- Show spinner ---
         showSpinner(saveProjectDetailsBtn); 
-
         const updatedData = {
             ProjectID: currentProjectID,
             Name: document.getElementById('editProjectName').value, 
@@ -1060,16 +830,13 @@ if (saveProjectDetailsBtn) {
             Contact1: document.getElementById('editContact1').value,
             Contact2: document.getElementById('editContact2').value,
         };
-
         try {
             const result = await sendDataToSheet('Projects', 'PUT', updatedData);
-
             if (result.status === 'success') {
                 const index = allProjects.findIndex(p => p.ProjectID === currentProjectID);
                 if (index !== -1) {
                     allProjects[index] = { ...allProjects[index], ...updatedData };
                 }
-                
                 toggleEditMode(false);
                 await loadProjects(); 
                 showMessageBox('Project details updated successfully!', 'success');
@@ -1079,26 +846,19 @@ if (saveProjectDetailsBtn) {
         } catch (error) {
             showMessageBox(`An unexpected error occurred: ${error.message}`, 'error');
         } finally {
-            // --- Hide spinner ---
             hideSpinner(saveProjectDetailsBtn);
         }
     });
 }
 
-
-// --- Delete Project Logic (MODIFIED to use SweetAlert2) ---
 const deleteProjectBtn = document.getElementById('deleteProjectBtn');
-
 if (deleteProjectBtn) {
     deleteProjectBtn.addEventListener('click', async () => {
         if (!currentProjectID) {
             showMessageBox('Please select a project to delete.', 'alert');
             return;
         }
-
         const projectToDeleteName = allProjects.find(p => p.ProjectID === currentProjectID)?.Name || currentProjectID;
-
-        // NEW: Use SweetAlert2 for confirmation
         Swal.fire({
             title: `Are you sure you want to delete ${projectToDeleteName}?`,
             text: "This will delete ALL associated tasks, materials, and expenses. This action cannot be undone.",
@@ -1108,13 +868,9 @@ if (deleteProjectBtn) {
             cancelButtonColor: '#d33',
             confirmButtonText: 'Yes, delete it!'
         }).then(async (result) => {
-            // This code runs AFTER the user clicks a button
             if (result.isConfirmed) {
-                // User confirmed, proceed with deletion
                 const deletePayload = { ProjectID: currentProjectID };
-                
                 showMessageBox(`Deleting ${projectToDeleteName} and all its data...`, 'alert');
-
                 try {
                     const results = await Promise.all([
                         sendDataToSheet('Projects', 'DELETE', deletePayload),
@@ -1122,41 +878,31 @@ if (deleteProjectBtn) {
                         sendDataToSheet('Materials', 'DELETE', deletePayload),
                         sendDataToSheet('Expenses', 'DELETE', deletePayload)
                     ]);
-
                     const failures = results.filter(res => res.status !== 'success');
-
                     if (failures.length > 0) {
                         throw new Error(failures.map(f => f.message).join(', '));
                     }
-
-                    currentProjectID = null; // Clear current selection
-                    await loadProjects(); // Reload projects
+                    currentProjectID = null;
+                    await loadProjects();
                     showMessageBox(`Project ${projectToDeleteName} was successfully deleted.`, 'success');
-
                 } catch (error) {
                     showMessageBox(`Failed to delete project: ${error.message}`, 'error');
                 }
             }
         });
-        // End of new SweetAlert2 logic
     });
 }
 
-
 // --- 9. INITIALIZATION ---
-
 window.onload = loadProjects;
-// --- LOGOUT BUTTON LOGIC ---
+
+// --- LOGOUT BUTTON LOGIC (MODIFIED TO USE COOKIES) ---
 const logoutBtn = document.getElementById('logoutBtn');
 if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
-        localStorage.removeItem('isLoggedIn'); // Clear the login session
+        // Delete the cookie by setting its max-age to 0
+        document.cookie = "isLoggedIn=; path=/; max-age=0"; 
         window.location.href = '/login.html'; // Go back to login page
     });
 }
 // ---------------------------
-
-
-
-
-
