@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-     "source": "/api(.*)",
-      "destination": "https://script.google.com/macros/s/AKfycbzwxLHSpJ9xQTKfc2wUQaIFzuUeWCxHqAXwueaf4jFXPdAYTTYPvQ_dJHzbZ9-MOkxQ/exec$1"
+      "source": "/api(.*)",
+      "destination": "https://script.google.com/macros/s/AKfycbw3B9_9nFkHW-4425iEufUi8VEKjP7UzglY4ywMMoP7ErizwWIt10K6ZKJ2B5GMjs_7/exec$1"
     },
     {
       "source": "/(.*)",
