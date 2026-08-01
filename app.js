@@ -326,6 +326,9 @@ function renderWork(){
   });
 }
 function openTask(t,off){
+  /* entries from allOpen carry no notes/docs — normalise before rendering */
+  t=Object.assign({notes:[],docs:[],QtyTarget:0,QtyDone:0,QtyRework:0,
+                   ProjectName:t.ProjectID||'',Grp:'',WorkCentre:''},t);
   var b=$('sheetBody');b.innerHTML='';
   b.appendChild(el('div','lbl',off?'Other work (off station)':'Record work'));
 
@@ -453,8 +456,12 @@ $('otherWork').addEventListener('click',function(){
   b.appendChild(el('p','note','No approval needed. It is simply recorded as work you did at another machine.'));
   var go=el('button','bigbtn b-done dev');go.innerHTML='पुढे <em>Continue</em>';
   go.addEventListener('click',function(){
-    var t=(S.data.tasks||[]).filter(function(x){return x.TaskID===ts.value;})[0];
-    if(!t){toast('Pick a job',true);return;}
+    if(!ts.value){toast('Pick a job first',true);return;}
+    /* must search the SAME list that filled the dropdown — an operator's
+       S.data.tasks holds only his own work, so allOpen is the source here. */
+    var t=pool.filter(function(x){return x.TaskID===ts.value;})[0]
+        ||(S.data.tasks||[]).filter(function(x){return x.TaskID===ts.value;})[0];
+    if(!t){toast('That job is no longer open. Refresh and try again.',true);return;}
     openTask(t,true);
   });
   b.appendChild(go);$('sheet').classList.remove('hidden');
