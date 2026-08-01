@@ -460,6 +460,157 @@ $('otherWork').addEventListener('click',function(){
   b.appendChild(go);$('sheet').classList.remove('hidden');
 });
 
+function assignDialog(t){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Assign task'));
+  b.appendChild(el('div','top',t.Operation));
+  b.appendChild(el('div','tproj',t.ProjectName));
+  lab(b,'Give it to');
+  var us=el('select');opt(us,'','— unassigned —');
+  (S.data.users||[]).forEach(function(u){opt(us,u.Name,u.Name+' ('+(u.WorkCentre||u.Role)+')',u.Name===t.AssignedTo);});
+  b.appendChild(us);
+  var go=el('button','bigbtn b-done');go.textContent='Save';
+  go.addEventListener('click',function(){closeSheet();
+    api('assignTask',{taskID:t.TaskID,to:us.value}).then(function(){toast('Reassigned');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+}
+/* ---------- SET CURRENT STAGE ----------
+   For a project that arrived already part-built. Pick where it actually is and
+   the tasks are moved to match — earlier steps closed, that step opened.        */
+function stageDialog(p){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Where is this project right now'));
+  b.appendChild(el('div','top',p.Name));
+  b.appendChild(el('p','note','Pick the step being worked on today. Everything before it is marked finished, everything after goes back to waiting.'));
+
+  var tasks=(S.data.tasks||[]).filter(function(t){return t.ProjectID===p.ProjectID;})
+    .sort(function(a,b){return Number(a.Seq)-Number(b.Seq);});
+  if(!tasks.length){b.appendChild(el('div','note','This project has no tasks.'));
+    $('sheet').classList.remove('hidden');return;}
+
+  var chosen=null;
+  var wrap=el('div','opsel');
+  tasks.forEach(function(t){
+    var l=el('label');
+    var r=el('input');r.type='radio';r.name='stg';r.value=t.TaskID;
+    if(String(t.Status)==='ready'||String(t.Status)==='running'){r.checked=true;chosen=t.TaskID;}
+    r.addEventListener('change',function(){chosen=t.TaskID;});
+    l.appendChild(r);
+    l.appendChild(el('span',null,t.Seq+'. '+t.Operation));
+    var tag=String(t.Status)==='done'?'finished':String(t.Status)==='waiting'?'waiting':'HERE NOW';
+    l.appendChild(el('span','who',(t.AssignedTo||'unassigned')+' · '+tag));
+    wrap.appendChild(l);});
+  b.appendChild(wrap);
+
+  lab(b,'Earlier steps');
+  var md=el('select');
+  opt(md,'yes','Mark them all finished (normal)');
+  opt(md,'no','Leave them as they are');
+  b.appendChild(md);
+
+  var go=el('button','bigbtn b-done');go.textContent='Move project to this stage';
+  go.addEventListener('click',function(){
+    if(!chosen){toast('Pick a step',true);return;}
+    closeSheet();
+    api('setStage',{projectID:p.ProjectID,taskID:chosen,markEarlierDone:md.value==='yes'?1:0})
+      .then(function(r){toast('Now at '+r.stage+' · '+r.changed+' tasks moved');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);
+  $('sheet').classList.remove('hidden');
+}
+
+/* ---------- EDITING: tracker is now live, not read-only ---------- */
+function taskEditor(t){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Edit task'));
+  b.appendChild(el('div','top',t.Operation));
+  b.appendChild(el('div','tproj',t.ProjectName+' · '+(t.WorkCentre||t.Grp)));
+
+  lab(b,'Assigned to');
+  var us=el('select');opt(us,'','— unassigned —');
+  (S.data.users||[]).forEach(function(u){opt(us,u.Name,u.Name+' ('+(u.WorkCentre||u.Role)+')',u.Name===t.AssignedTo);});
+  b.appendChild(us);
+  lab(b,'Work centre');
+  var wc=el('select');
+  (S.data.workCentres||[]).forEach(function(w){opt(wc,w.Name,w.Name,w.Name===t.WorkCentre);});
+  b.appendChild(wc);
+  lab(b,'Target quantity');var qt=inp(b,'number');qt.value=t.QtyTarget||0;
+  lab(b,'Completed quantity');var qd=inp(b,'number');qd.value=t.QtyDone||0;
+  lab(b,'Note for this task');var nt=inp(b,'text');nt.value=t.Note||'';
+
+  var save=el('button','bigbtn b-done');save.textContent='Save changes';
+  save.addEventListener('click',function(){
+    closeSheet();
+    api('saveTask',{row:{TaskID:t.TaskID,ProjectID:t.ProjectID,AssignedTo:us.value,
+      WorkCentre:wc.value,QtyTarget:Number(qt.value)||0,QtyDone:Number(qd.value)||0,Note:nt.value}})
+      .then(function(){toast('Task updated');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(save);
+
+  if(['director','planner'].indexOf(S.me.role)>=0){
+    b.appendChild(el('div','lbl','Force status — logged in the audit trail'));
+    var sb=el('div','statusbtns');
+    ['waiting','ready','running','done'].forEach(function(st){
+      var x=el('button','chip'+(String(t.Status)===st?' on':''),st);
+      x.addEventListener('click',function(){closeSheet();
+        api('setTaskStatus',{taskID:t.TaskID,status:st})
+          .then(function(){toast('Status set to '+st);refresh();})
+          .catch(function(e){toast(e.message,true);});});
+      sb.appendChild(x);});
+    b.appendChild(sb);
+    var del=el('button','chip');del.textContent='Delete this task';
+    del.style.marginTop='12px';del.style.color='var(--late)';
+    del.addEventListener('click',function(){closeSheet();
+      api('delTask',{taskID:t.TaskID,projectID:t.ProjectID})
+        .then(function(){toast('Task deleted');refresh();})
+        .catch(function(e){toast(e.message,true);});});
+    b.appendChild(del);
+  }
+  $('sheet').classList.remove('hidden');
+}
+function projectEditor(p){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Edit project'));
+  b.appendChild(el('div','top',p.Name));
+  lab(b,'Project name');var nm=inp(b,'text');nm.value=p.Name||'';
+  lab(b,'Customer');var cu=inp(b,'text');cu.value=p.Customer||'';
+  lab(b,'Site address');var ad=inp(b,'text');ad.value=p.Address||'';
+  lab(b,'Director');var dr=el('select');
+  ['Rupali','Ashutosh','Mohit'].forEach(function(x){opt(dr,x,x,x===p.Director);});b.appendChild(dr);
+  lab(b,'Size class');var sz=el('select');
+  ['S','M','L','XL'].forEach(function(x){opt(sz,x,x,x===p.Size);});b.appendChild(sz);
+  lab(b,'Quantity');var qt=inp(b,'number');qt.value=p.Qty||0;
+  lab(b,'Promised date');var pd=inp(b,'date');
+  if(p.PromisedDate){var dd=new Date(p.PromisedDate);
+    if(!isNaN(dd))pd.value=dd.toISOString().slice(0,10);}
+  lab(b,'Blocker (blank if running)');var bl=inp(b,'text');bl.value=p.Blocker||'';
+  lab(b,'Apply the quantity to open tasks as well');
+  var sq=el('select');opt(sq,'yes','Yes, update open tasks');opt(sq,'no','No, leave tasks alone');
+  b.appendChild(sq);
+
+  b.appendChild(el('p','note','Stage cannot be typed — it is worked out from the tasks. Use "Set stage" to move a project.'));
+
+  var save=el('button','bigbtn b-done');save.textContent='Save project';
+  save.addEventListener('click',function(){closeSheet();
+    api('saveProject',{syncQty:sq.value==='yes'?1:0,
+      row:{ProjectID:p.ProjectID,Name:nm.value,Customer:cu.value,
+      Address:ad.value,Director:dr.value,Size:sz.value,Qty:Number(qt.value)||0,
+      PromisedDate:pd.value,Blocker:bl.value}})
+      .then(function(){toast('Project updated');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(save);
+
+  var stg=el('button','bigbtn b-stop');stg.textContent='Set current stage';
+  stg.addEventListener('click',function(){stageDialog(p);});
+  b.appendChild(stg);
+  $('sheet').classList.remove('hidden');
+}
+
+function closeSheet(){$('sheet').classList.add('hidden');}
+$('sheetClose').addEventListener('click',closeSheet);
+$('sheet').addEventListener('click',function(e){if(e.target===$('sheet'))closeSheet();});
+
 /* ---------- MATERIAL FROM INSIDE A TASK ----------
    The operator who consumes the sheet is the one who records it. Stores stops
    being a bottleneck and the stock figure stops drifting.                      */
