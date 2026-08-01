@@ -118,12 +118,17 @@ $('logout').addEventListener('click',function(){logout(false);});
 function start(){
   $('login').classList.add('hidden');$('app').classList.remove('hidden');
   $('whoName').textContent=S.me.name+' · '+S.me.role;
-  var onFloor=['operator','supervisor','station'].indexOf(S.me.role)>=0;
+  var onFloor=['operator','helper','supervisor','manager','station'].indexOf(S.me.role)>=0;
   $('stationbar').style.display=onFloor?'flex':'none';
   $('stnName').textContent=S.me.workCentre||S.me.station||'—';
   /* Always available on the floor. Hiding it was the bug — a station account
      has no personal work centre until somebody signs in with a PIN.          */
+  /* Only a shared tablet needs a "who is working" switch. On a personal
+     login the person is already known, so the button just adds helpers.     */
   $('crewBtn').classList.toggle('hidden',!onFloor);
+  $('crewBtn').innerHTML = (S.me.role==='station')
+    ? 'कोण काम करत आहे <em>Who is working</em>'
+    : 'मदतनीस <em>Helpers with me</em>';
   renderCrew();
   var t=$('tabs');t.innerHTML='';
   (TABS[S.me.role]||TABS.operator).forEach(function(x,i){
@@ -196,25 +201,31 @@ function crewDialog(){
   var b=$('sheetBody');b.innerHTML='';
   b.appendChild(el('div','lbl','Who is working here now'));
   b.appendChild(el('div','top',wcNameOf()));
-  b.appendChild(el('p','note','The operator signs in with a PIN. Helpers are ticked — they need no device and no password.'));
+  b.appendChild(el('p','note', S.me.role==='station'
+    ? 'The operator signs in with a PIN. Helpers are just ticked — no PIN, no device.'
+    : 'You are already signed in. Just tick anyone helping you right now.'));
 
   var wcName=S.me.workCentre||S.me.station||'';
   var all=(S.data.users||[]);
   var people=all.filter(function(u){
     return !wcName || u.WorkCentre===wcName || u.Kind==='helper';});
   if(!people.length) people=all;   /* never show an empty picker */
-  lab(b,'Operator running the machine');
-  var ops=el('div','people');
-  people.filter(function(u){return u.Kind!=='helper';}).forEach(function(u){
-    var d=el('div','person'+(S.crew.op===u.Name?' sel':''),u.Name);
-    d.appendChild(el('small',null,'Operator'));
-    d.addEventListener('click',function(){pinPad(u.Name);});
-    ops.appendChild(d);});
-  b.appendChild(ops);
+  if(S.me.role==='station'){
+    lab(b,'Operator running the machine');
+    var ops=el('div','people');
+    people.filter(function(u){return u.Kind!=='helper';}).forEach(function(u){
+      var d=el('div','person'+(S.crew.op===u.Name?' sel':''),u.Name);
+      d.appendChild(el('small',null,'Operator'));
+      d.addEventListener('click',function(){pinPad(u.Name);});
+      ops.appendChild(d);});
+    b.appendChild(ops);
+  } else {
+    S.crew.op=S.me.name;
+  }
 
   lab(b,'Helpers assisting (tap to add or remove)');
   var hs=el('div','people');
-  people.filter(function(u){return u.Kind==='helper';}).forEach(function(u){
+  people.filter(function(u){return u.Kind==='helper'&&u.Name!==S.me.name;}).forEach(function(u){
     var on=S.crew.helpers.indexOf(u.Name)>=0;
     var d=el('div','person'+(on?' sel':''),u.Name);
     d.appendChild(el('small',null,'Helper'));
@@ -317,7 +328,7 @@ function renderWork(){
 function openTask(t,off){
   var b=$('sheetBody');b.innerHTML='';
   b.appendChild(el('div','lbl',off?'Other work (off station)':'Record work'));
-  if(off&&S.offAuth) b.appendChild(el('div','tproj','Approved by '+S.offAuth.by));
+
   b.appendChild(el('div','top',t.Operation));
   b.appendChild(el('div','tproj',t.ProjectName+' · '+(t.WorkCentre||t.Grp)));
 
@@ -386,8 +397,7 @@ function openTask(t,off){
     var body={taskID:t.TaskID,family:fs.value,qty:S.sel.qty,
       rework:rw.value?Number(rw.value):0,
       workCentre:off?wc.value:(t.WorkCentre||S.me.workCentre||''),offStation:off?1:0,
-      helpers:S.crew.helpers.join(', '),via:S.stationToken?'station':'phone',
-      auth:off&&S.offAuth?S.offAuth.auth:''};
+      helpers:S.crew.helpers.join(', '),via:S.stationToken?'station':'phone'};
     closeSheet();
     api('tap',body).then(function(r){
       toast(r.finished?('Task complete → '+(r.next||'')):(S.sel.qty+' पूर्ण · logged'));
@@ -410,207 +420,45 @@ function openTask(t,off){
 }
 $('otherWork').addEventListener('click',function(){
   var b=$('sheetBody');b.innerHTML='';
-  b.appendChild(el('div','lbl','Work you did somewhere else today'));
+  b.appendChild(el('div','lbl','दुसरीकडे केलेले काम / Work you did elsewhere'));
+  if(!((S.data.allOpen||[]).length)&&!((S.data.tasks||[]).length)){
+    b.appendChild(el('p','note','No open jobs found anywhere. If this looks wrong, log out and log in again.'));
+  }
   b.appendChild(el('p','note','Pick the task you actually worked on. Your supervisor will see this was off your own station.'));
-  lab(b,'Task');
-  var ts=el('select');
-  (S.data.tasks||[]).filter(function(t){return ['ready','running'].indexOf(String(t.Status))>=0;})
-    .forEach(function(t){opt(ts,t.TaskID,t.ProjectName+' — '+t.Operation+
-      (t.AssignedTo?' ('+t.AssignedTo+')':''));});
-  b.appendChild(ts);
-  b.appendChild(el('p','note','A supervisor must approve this with their PIN before it can be recorded.'));
-  var go=el('button','bigbtn b-done');go.textContent='Continue';
+  var pool=(S.data.allOpen&&S.data.allOpen.length)?S.data.allOpen:(S.data.tasks||[]);
+  pool=pool.filter(function(t){return ['ready','running'].indexOf(String(t.Status))>=0;});
+
+  lab(b,'कोणत्या मशीनवर / Which machine');
+  var wsel=el('select');opt(wsel,'','— सर्व / all —');
+  pool.map(function(t){return t.Grp;})
+      .filter(function(v,i,a){return v&&a.indexOf(v)===i;})
+      .sort().forEach(function(g){opt(wsel,g);});
+  b.appendChild(wsel);
+
+  lab(b,'कोणते काम / Which job');
+  var ts=el('select');ts.size=1;
+  var cnt=el('div','note');
+  function fillJobs(){
+    ts.innerHTML='';
+    var list=pool.filter(function(t){return !wsel.value||t.Grp===wsel.value;});
+    list.sort(function(a,b){return String(a.ProjectName).localeCompare(String(b.ProjectName));});
+    list.forEach(function(t){
+      opt(ts,t.TaskID,t.ProjectName+' — '+t.Operation+
+        (t.AssignedTo&&t.AssignedTo!==S.me.name?' · '+t.AssignedTo:''));});
+    if(!ts.children.length){opt(ts,'','No open jobs there');}
+    cnt.textContent=list.length+' open job'+(list.length===1?'':'s')+' to choose from';
+  }
+  wsel.addEventListener('change',fillJobs);fillJobs();
+  b.appendChild(ts);b.appendChild(cnt);
+  b.appendChild(el('p','note','No approval needed. It is simply recorded as work you did at another machine.'));
+  var go=el('button','bigbtn b-done dev');go.innerHTML='पुढे <em>Continue</em>';
   go.addEventListener('click',function(){
     var t=(S.data.tasks||[]).filter(function(x){return x.TaskID===ts.value;})[0];
-    if(!t){toast('Pick a task',true);return;}
-    supervisorPin(function(auth,by){ S.offAuth={auth:auth,by:by}; openTask(t,true); });
+    if(!t){toast('Pick a job',true);return;}
+    openTask(t,true);
   });
   b.appendChild(go);$('sheet').classList.remove('hidden');
 });
-
-/* Supervisor stands at the machine and enters their PIN. Valid for 15 minutes. */
-function supervisorPin(done){
-  var b=$('sheetBody');b.innerHTML='';
-  b.appendChild(el('div','lbl','Supervisor approval'));
-  b.appendChild(el('p','note','Ask your supervisor to enter their PIN. Off-station work is not recorded without it.'));
-  lab(b,'Supervisor');
-  var us=el('select');
-  (S.data.users||[]).filter(function(u){
-    return ['supervisor','planner','director'].indexOf(u.Role)>=0;})
-    .forEach(function(u){opt(us,u.Name);});
-  if(!us.children.length) opt(us,'','No supervisor listed — set a Role and PIN in Setup');
-  b.appendChild(us);
-  var dots=el('div','pindots','');b.appendChild(dots);
-  var pin='';
-  var g=el('div','pingrid');
-  ['1','2','3','4','5','6','7','8','9','←','0','OK'].forEach(function(k){
-    var btn=el('button','pinkey',k);btn.type='button';
-    btn.addEventListener('click',function(){
-      if(k==='←')pin=pin.slice(0,-1);
-      else if(k==='OK')return go();
-      else if(pin.length<6)pin+=k;
-      dots.textContent=pin.replace(/./g,'●');
-      if(pin.length===4)go();});
-    g.appendChild(btn);});
-  b.appendChild(g);
-  function go(){
-    if(pin.length<4)return;
-    api('verifyPin',{name:us.value,pin:pin}).then(function(r){
-      closeSheet();toast('Approved by '+r.by);done(r.auth,r.by);
-    }).catch(function(e){pin='';dots.textContent='';toast(e.message,true);});
-  }
-  $('sheet').classList.remove('hidden');
-}
-function assignDialog(t){
-  var b=$('sheetBody');b.innerHTML='';
-  b.appendChild(el('div','lbl','Assign task'));
-  b.appendChild(el('div','top',t.Operation));
-  b.appendChild(el('div','tproj',t.ProjectName));
-  lab(b,'Give it to');
-  var us=el('select');opt(us,'','— unassigned —');
-  (S.data.users||[]).forEach(function(u){opt(us,u.Name,u.Name+' ('+(u.WorkCentre||u.Role)+')',u.Name===t.AssignedTo);});
-  b.appendChild(us);
-  var go=el('button','bigbtn b-done');go.textContent='Save';
-  go.addEventListener('click',function(){closeSheet();
-    api('assignTask',{taskID:t.TaskID,to:us.value}).then(function(){toast('Reassigned');refresh();})
-      .catch(function(e){toast(e.message,true);});});
-  b.appendChild(go);$('sheet').classList.remove('hidden');
-}
-/* ---------- SET CURRENT STAGE ----------
-   For a project that arrived already part-built. Pick where it actually is and
-   the tasks are moved to match — earlier steps closed, that step opened.        */
-function stageDialog(p){
-  var b=$('sheetBody');b.innerHTML='';
-  b.appendChild(el('div','lbl','Where is this project right now'));
-  b.appendChild(el('div','top',p.Name));
-  b.appendChild(el('p','note','Pick the step being worked on today. Everything before it is marked finished, everything after goes back to waiting.'));
-
-  var tasks=(S.data.tasks||[]).filter(function(t){return t.ProjectID===p.ProjectID;})
-    .sort(function(a,b){return Number(a.Seq)-Number(b.Seq);});
-  if(!tasks.length){b.appendChild(el('div','note','This project has no tasks.'));
-    $('sheet').classList.remove('hidden');return;}
-
-  var chosen=null;
-  var wrap=el('div','opsel');
-  tasks.forEach(function(t){
-    var l=el('label');
-    var r=el('input');r.type='radio';r.name='stg';r.value=t.TaskID;
-    if(String(t.Status)==='ready'||String(t.Status)==='running'){r.checked=true;chosen=t.TaskID;}
-    r.addEventListener('change',function(){chosen=t.TaskID;});
-    l.appendChild(r);
-    l.appendChild(el('span',null,t.Seq+'. '+t.Operation));
-    var tag=String(t.Status)==='done'?'finished':String(t.Status)==='waiting'?'waiting':'HERE NOW';
-    l.appendChild(el('span','who',(t.AssignedTo||'unassigned')+' · '+tag));
-    wrap.appendChild(l);});
-  b.appendChild(wrap);
-
-  lab(b,'Earlier steps');
-  var md=el('select');
-  opt(md,'yes','Mark them all finished (normal)');
-  opt(md,'no','Leave them as they are');
-  b.appendChild(md);
-
-  var go=el('button','bigbtn b-done');go.textContent='Move project to this stage';
-  go.addEventListener('click',function(){
-    if(!chosen){toast('Pick a step',true);return;}
-    closeSheet();
-    api('setStage',{projectID:p.ProjectID,taskID:chosen,markEarlierDone:md.value==='yes'?1:0})
-      .then(function(r){toast('Now at '+r.stage+' · '+r.changed+' tasks moved');refresh();})
-      .catch(function(e){toast(e.message,true);});});
-  b.appendChild(go);
-  $('sheet').classList.remove('hidden');
-}
-
-/* ---------- EDITING: tracker is now live, not read-only ---------- */
-function taskEditor(t){
-  var b=$('sheetBody');b.innerHTML='';
-  b.appendChild(el('div','lbl','Edit task'));
-  b.appendChild(el('div','top',t.Operation));
-  b.appendChild(el('div','tproj',t.ProjectName+' · '+(t.WorkCentre||t.Grp)));
-
-  lab(b,'Assigned to');
-  var us=el('select');opt(us,'','— unassigned —');
-  (S.data.users||[]).forEach(function(u){opt(us,u.Name,u.Name+' ('+(u.WorkCentre||u.Role)+')',u.Name===t.AssignedTo);});
-  b.appendChild(us);
-  lab(b,'Work centre');
-  var wc=el('select');
-  (S.data.workCentres||[]).forEach(function(w){opt(wc,w.Name,w.Name,w.Name===t.WorkCentre);});
-  b.appendChild(wc);
-  lab(b,'Target quantity');var qt=inp(b,'number');qt.value=t.QtyTarget||0;
-  lab(b,'Completed quantity');var qd=inp(b,'number');qd.value=t.QtyDone||0;
-  lab(b,'Note for this task');var nt=inp(b,'text');nt.value=t.Note||'';
-
-  var save=el('button','bigbtn b-done');save.textContent='Save changes';
-  save.addEventListener('click',function(){
-    closeSheet();
-    api('saveTask',{row:{TaskID:t.TaskID,ProjectID:t.ProjectID,AssignedTo:us.value,
-      WorkCentre:wc.value,QtyTarget:Number(qt.value)||0,QtyDone:Number(qd.value)||0,Note:nt.value}})
-      .then(function(){toast('Task updated');refresh();})
-      .catch(function(e){toast(e.message,true);});});
-  b.appendChild(save);
-
-  if(['director','planner'].indexOf(S.me.role)>=0){
-    b.appendChild(el('div','lbl','Force status — logged in the audit trail'));
-    var sb=el('div','statusbtns');
-    ['waiting','ready','running','done'].forEach(function(st){
-      var x=el('button','chip'+(String(t.Status)===st?' on':''),st);
-      x.addEventListener('click',function(){closeSheet();
-        api('setTaskStatus',{taskID:t.TaskID,status:st})
-          .then(function(){toast('Status set to '+st);refresh();})
-          .catch(function(e){toast(e.message,true);});});
-      sb.appendChild(x);});
-    b.appendChild(sb);
-    var del=el('button','chip');del.textContent='Delete this task';
-    del.style.marginTop='12px';del.style.color='var(--late)';
-    del.addEventListener('click',function(){closeSheet();
-      api('delTask',{taskID:t.TaskID,projectID:t.ProjectID})
-        .then(function(){toast('Task deleted');refresh();})
-        .catch(function(e){toast(e.message,true);});});
-    b.appendChild(del);
-  }
-  $('sheet').classList.remove('hidden');
-}
-function projectEditor(p){
-  var b=$('sheetBody');b.innerHTML='';
-  b.appendChild(el('div','lbl','Edit project'));
-  b.appendChild(el('div','top',p.Name));
-  lab(b,'Project name');var nm=inp(b,'text');nm.value=p.Name||'';
-  lab(b,'Customer');var cu=inp(b,'text');cu.value=p.Customer||'';
-  lab(b,'Site address');var ad=inp(b,'text');ad.value=p.Address||'';
-  lab(b,'Director');var dr=el('select');
-  ['Rupali','Ashutosh','Mohit'].forEach(function(x){opt(dr,x,x,x===p.Director);});b.appendChild(dr);
-  lab(b,'Size class');var sz=el('select');
-  ['S','M','L','XL'].forEach(function(x){opt(sz,x,x,x===p.Size);});b.appendChild(sz);
-  lab(b,'Quantity');var qt=inp(b,'number');qt.value=p.Qty||0;
-  lab(b,'Promised date');var pd=inp(b,'date');
-  if(p.PromisedDate){var dd=new Date(p.PromisedDate);
-    if(!isNaN(dd))pd.value=dd.toISOString().slice(0,10);}
-  lab(b,'Blocker (blank if running)');var bl=inp(b,'text');bl.value=p.Blocker||'';
-  lab(b,'Apply the quantity to open tasks as well');
-  var sq=el('select');opt(sq,'yes','Yes, update open tasks');opt(sq,'no','No, leave tasks alone');
-  b.appendChild(sq);
-
-  b.appendChild(el('p','note','Stage cannot be typed — it is worked out from the tasks. Use "Set stage" to move a project.'));
-
-  var save=el('button','bigbtn b-done');save.textContent='Save project';
-  save.addEventListener('click',function(){closeSheet();
-    api('saveProject',{syncQty:sq.value==='yes'?1:0,
-      row:{ProjectID:p.ProjectID,Name:nm.value,Customer:cu.value,
-      Address:ad.value,Director:dr.value,Size:sz.value,Qty:Number(qt.value)||0,
-      PromisedDate:pd.value,Blocker:bl.value}})
-      .then(function(){toast('Project updated');refresh();})
-      .catch(function(e){toast(e.message,true);});});
-  b.appendChild(save);
-
-  var stg=el('button','bigbtn b-stop');stg.textContent='Set current stage';
-  stg.addEventListener('click',function(){stageDialog(p);});
-  b.appendChild(stg);
-  $('sheet').classList.remove('hidden');
-}
-
-function closeSheet(){$('sheet').classList.add('hidden');}
-$('sheetClose').addEventListener('click',closeSheet);
-$('sheet').addEventListener('click',function(e){if(e.target===$('sheet'))closeSheet();});
 
 /* ---------- MATERIAL FROM INSIDE A TASK ----------
    The operator who consumes the sheet is the one who records it. Stores stops
