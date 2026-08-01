@@ -429,6 +429,51 @@ function assignDialog(t){
       .catch(function(e){toast(e.message,true);});});
   b.appendChild(go);$('sheet').classList.remove('hidden');
 }
+/* ---------- SET CURRENT STAGE ----------
+   For a project that arrived already part-built. Pick where it actually is and
+   the tasks are moved to match — earlier steps closed, that step opened.        */
+function stageDialog(p){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Where is this project right now'));
+  b.appendChild(el('div','top',p.Name));
+  b.appendChild(el('p','note','Pick the step being worked on today. Everything before it is marked finished, everything after goes back to waiting.'));
+
+  var tasks=(S.data.tasks||[]).filter(function(t){return t.ProjectID===p.ProjectID;})
+    .sort(function(a,b){return Number(a.Seq)-Number(b.Seq);});
+  if(!tasks.length){b.appendChild(el('div','note','This project has no tasks.'));
+    $('sheet').classList.remove('hidden');return;}
+
+  var chosen=null;
+  var wrap=el('div','opsel');
+  tasks.forEach(function(t){
+    var l=el('label');
+    var r=el('input');r.type='radio';r.name='stg';r.value=t.TaskID;
+    if(String(t.Status)==='ready'||String(t.Status)==='running'){r.checked=true;chosen=t.TaskID;}
+    r.addEventListener('change',function(){chosen=t.TaskID;});
+    l.appendChild(r);
+    l.appendChild(el('span',null,t.Seq+'. '+t.Operation));
+    var tag=String(t.Status)==='done'?'finished':String(t.Status)==='waiting'?'waiting':'HERE NOW';
+    l.appendChild(el('span','who',(t.AssignedTo||'unassigned')+' · '+tag));
+    wrap.appendChild(l);});
+  b.appendChild(wrap);
+
+  lab(b,'Earlier steps');
+  var md=el('select');
+  opt(md,'yes','Mark them all finished (normal)');
+  opt(md,'no','Leave them as they are');
+  b.appendChild(md);
+
+  var go=el('button','bigbtn b-done');go.textContent='Move project to this stage';
+  go.addEventListener('click',function(){
+    if(!chosen){toast('Pick a step',true);return;}
+    closeSheet();
+    api('setStage',{projectID:p.ProjectID,taskID:chosen,markEarlierDone:md.value==='yes'?1:0})
+      .then(function(r){toast('Now at '+r.stage+' · '+r.changed+' tasks moved');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);
+  $('sheet').classList.remove('hidden');
+}
+
 /* ---------- EDITING: tracker is now live, not read-only ---------- */
 function taskEditor(t){
   var b=$('sheetBody');b.innerHTML='';
@@ -494,14 +539,26 @@ function projectEditor(p){
   if(p.PromisedDate){var dd=new Date(p.PromisedDate);
     if(!isNaN(dd))pd.value=dd.toISOString().slice(0,10);}
   lab(b,'Blocker (blank if running)');var bl=inp(b,'text');bl.value=p.Blocker||'';
+  lab(b,'Apply the quantity to open tasks as well');
+  var sq=el('select');opt(sq,'yes','Yes, update open tasks');opt(sq,'no','No, leave tasks alone');
+  b.appendChild(sq);
+
+  b.appendChild(el('p','note','Stage cannot be typed — it is worked out from the tasks. Use "Set stage" to move a project.'));
+
   var save=el('button','bigbtn b-done');save.textContent='Save project';
   save.addEventListener('click',function(){closeSheet();
-    api('saveProject',{row:{ProjectID:p.ProjectID,Name:nm.value,Customer:cu.value,
+    api('saveProject',{syncQty:sq.value==='yes'?1:0,
+      row:{ProjectID:p.ProjectID,Name:nm.value,Customer:cu.value,
       Address:ad.value,Director:dr.value,Size:sz.value,Qty:Number(qt.value)||0,
       PromisedDate:pd.value,Blocker:bl.value}})
       .then(function(){toast('Project updated');refresh();})
       .catch(function(e){toast(e.message,true);});});
-  b.appendChild(save);$('sheet').classList.remove('hidden');
+  b.appendChild(save);
+
+  var stg=el('button','bigbtn b-stop');stg.textContent='Set current stage';
+  stg.addEventListener('click',function(){stageDialog(p);});
+  b.appendChild(stg);
+  $('sheet').classList.remove('hidden');
 }
 
 function closeSheet(){$('sheet').classList.add('hidden');}
@@ -722,7 +779,20 @@ function renderTracker(){
     h.appendChild(el('b',null,p.Name));
     var meta=el('div','tmeta',p.Director+' · due '+dmy(p.PromisedDate)+
       ' · CR '+(p.cr||0)+' · '+p.pct+'% done');
-    h.appendChild(meta);c.appendChild(h);
+    h.appendChild(meta);
+    if(canAssign()){
+      var hb=el('div','trkbtns');
+      var bs=el('button','btn ghost small','Set stage');
+      bs.addEventListener('click',function(e){e.stopPropagation();stageDialog(p);});
+      hb.appendChild(bs);
+      if(['director','planner'].indexOf(S.me.role)>=0){
+        var be2=el('button','btn ghost small','Edit project');
+        be2.addEventListener('click',function(e){e.stopPropagation();projectEditor(p);});
+        hb.appendChild(be2);
+      }
+      h.appendChild(hb);
+    }
+    c.appendChild(h);
     if(p.Blocker) c.appendChild(el('div','tproj','⚠ '+p.Blocker));
     var tasks=(d.tasks||[]).filter(function(t){return t.ProjectID===p.ProjectID;})
       .sort(function(a,b){return Number(a.Seq)-Number(b.Seq);});
@@ -745,11 +815,7 @@ function renderTracker(){
       var bf=el('button','chip');bf.textContent='+ File';
       bf.addEventListener('click',function(){uploadDialog(p.ProjectID,'');});
       ch.appendChild(bn);ch.appendChild(bf);
-      if(['director','planner'].indexOf(S.me.role)>=0){
-        var be=el('button','chip');be.textContent='Edit project';
-        be.addEventListener('click',function(){projectEditor(p);});
-        ch.appendChild(be);
-      }
+
     }
     c.appendChild(ch);
     (p.notes||[]).slice(0,3).forEach(function(n){
