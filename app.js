@@ -87,7 +87,8 @@ var TABS={
   stores:[['stock','Stores'],['tracker','Order tracker'],['docs','Documents']],
   office:[['tracker','Order tracker'],['docs','Documents'],['board','Sequence'],
           ['report','Screenshots'],['stock','Stores']],
-  accounts:[['report','Screenshots'],['stock','Stores'],['docs','Documents']]
+  accounts:[['report','Screenshots'],['stock','Stores'],['docs','Documents']],
+  station:[['work','कामे / Jobs']]
 };
 function isOp(){return S.me&&S.me.role==='operator';}
 function canAssign(){return ['director','planner','supervisor'].indexOf(S.me.role)>=0;}
@@ -117,9 +118,12 @@ $('logout').addEventListener('click',function(){logout(false);});
 function start(){
   $('login').classList.add('hidden');$('app').classList.remove('hidden');
   $('whoName').textContent=S.me.name+' · '+S.me.role;
-  $('stationbar').style.display=(isOp()||S.me.role==='supervisor'||S.me.role==='station')?'flex':'none';
-  $('stnName').textContent=S.me.workCentre||'—';
-  $('crewBtn').classList.toggle('hidden',!(S.me.workCentre));
+  var onFloor=['operator','supervisor','station'].indexOf(S.me.role)>=0;
+  $('stationbar').style.display=onFloor?'flex':'none';
+  $('stnName').textContent=S.me.workCentre||S.me.station||'—';
+  /* Always available on the floor. Hiding it was the bug — a station account
+     has no personal work centre until somebody signs in with a PIN.          */
+  $('crewBtn').classList.toggle('hidden',!onFloor);
   renderCrew();
   var t=$('tabs');t.innerHTML='';
   (TABS[S.me.role]||TABS.operator).forEach(function(x,i){
@@ -187,14 +191,18 @@ function renderCrew(){
     c.appendChild(el('span','crewchip','कोणी नाही · nobody signed in'));
 }
 $('crewBtn').addEventListener('click',function(){crewDialog();});
+function wcNameOf(){ return S.me.workCentre||S.me.station||'Station'; }
 function crewDialog(){
   var b=$('sheetBody');b.innerHTML='';
   b.appendChild(el('div','lbl','Who is working here now'));
-  b.appendChild(el('div','top',S.me.workCentre||''));
+  b.appendChild(el('div','top',wcNameOf()));
   b.appendChild(el('p','note','The operator signs in with a PIN. Helpers are ticked — they need no device and no password.'));
 
-  var people=(S.data.users||[]).filter(function(u){
-    return u.WorkCentre===S.me.workCentre||u.Kind==='helper';});
+  var wcName=S.me.workCentre||S.me.station||'';
+  var all=(S.data.users||[]);
+  var people=all.filter(function(u){
+    return !wcName || u.WorkCentre===wcName || u.Kind==='helper';});
+  if(!people.length) people=all;   /* never show an empty picker */
   lab(b,'Operator running the machine');
   var ops=el('div','people');
   people.filter(function(u){return u.Kind!=='helper';}).forEach(function(u){
@@ -309,6 +317,7 @@ function renderWork(){
 function openTask(t,off){
   var b=$('sheetBody');b.innerHTML='';
   b.appendChild(el('div','lbl',off?'Other work (off station)':'Record work'));
+  if(off&&S.offAuth) b.appendChild(el('div','tproj','Approved by '+S.offAuth.by));
   b.appendChild(el('div','top',t.Operation));
   b.appendChild(el('div','tproj',t.ProjectName+' · '+(t.WorkCentre||t.Grp)));
 
@@ -377,7 +386,8 @@ function openTask(t,off){
     var body={taskID:t.TaskID,family:fs.value,qty:S.sel.qty,
       rework:rw.value?Number(rw.value):0,
       workCentre:off?wc.value:(t.WorkCentre||S.me.workCentre||''),offStation:off?1:0,
-      helpers:S.crew.helpers.join(', '),via:S.stationToken?'station':'phone'};
+      helpers:S.crew.helpers.join(', '),via:S.stationToken?'station':'phone',
+      auth:off&&S.offAuth?S.offAuth.auth:''};
     closeSheet();
     api('tap',body).then(function(r){
       toast(r.finished?('Task complete → '+(r.next||'')):(S.sel.qty+' पूर्ण · logged'));
@@ -408,12 +418,49 @@ $('otherWork').addEventListener('click',function(){
     .forEach(function(t){opt(ts,t.TaskID,t.ProjectName+' — '+t.Operation+
       (t.AssignedTo?' ('+t.AssignedTo+')':''));});
   b.appendChild(ts);
+  b.appendChild(el('p','note','A supervisor must approve this with their PIN before it can be recorded.'));
   var go=el('button','bigbtn b-done');go.textContent='Continue';
   go.addEventListener('click',function(){
     var t=(S.data.tasks||[]).filter(function(x){return x.TaskID===ts.value;})[0];
-    if(t) openTask(t,true);});
+    if(!t){toast('Pick a task',true);return;}
+    supervisorPin(function(auth,by){ S.offAuth={auth:auth,by:by}; openTask(t,true); });
+  });
   b.appendChild(go);$('sheet').classList.remove('hidden');
 });
+
+/* Supervisor stands at the machine and enters their PIN. Valid for 15 minutes. */
+function supervisorPin(done){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Supervisor approval'));
+  b.appendChild(el('p','note','Ask your supervisor to enter their PIN. Off-station work is not recorded without it.'));
+  lab(b,'Supervisor');
+  var us=el('select');
+  (S.data.users||[]).filter(function(u){
+    return ['supervisor','planner','director'].indexOf(u.Role)>=0;})
+    .forEach(function(u){opt(us,u.Name);});
+  if(!us.children.length) opt(us,'','No supervisor listed — set a Role and PIN in Setup');
+  b.appendChild(us);
+  var dots=el('div','pindots','');b.appendChild(dots);
+  var pin='';
+  var g=el('div','pingrid');
+  ['1','2','3','4','5','6','7','8','9','←','0','OK'].forEach(function(k){
+    var btn=el('button','pinkey',k);btn.type='button';
+    btn.addEventListener('click',function(){
+      if(k==='←')pin=pin.slice(0,-1);
+      else if(k==='OK')return go();
+      else if(pin.length<6)pin+=k;
+      dots.textContent=pin.replace(/./g,'●');
+      if(pin.length===4)go();});
+    g.appendChild(btn);});
+  b.appendChild(g);
+  function go(){
+    if(pin.length<4)return;
+    api('verifyPin',{name:us.value,pin:pin}).then(function(r){
+      closeSheet();toast('Approved by '+r.by);done(r.auth,r.by);
+    }).catch(function(e){pin='';dots.textContent='';toast(e.message,true);});
+  }
+  $('sheet').classList.remove('hidden');
+}
 function assignDialog(t){
   var b=$('sheetBody');b.innerHTML='';
   b.appendChild(el('div','lbl','Assign task'));
