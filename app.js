@@ -1,624 +1,910 @@
 /* =====================================================================
-   HI TEK PRODUCTION — app.js
-   Frontend for the Apps Script backend. No build step, no framework.
-   Everything runs from three static files on Vercel.
+   HI TEK PRODUCTION — app.js  v3  (task-centric)
+   An operator sees only the tasks assigned to him. Nothing else exists.
    ===================================================================== */
 (function(){
 'use strict';
+var API='/api';
+var S={token:null,me:null,data:null,queue:[],tab:null,sel:null};
 
-var API = '/api';                 // Vercel rewrite -> Apps Script /exec
-var S = { token:null, me:null, data:null, queue:[], tab:null, sel:null };
-
-/* ---------------- safe storage (works in preview AND on Vercel) ------- */
-var store = (function(){
-  try{ var k='__t'; localStorage.setItem(k,'1'); localStorage.removeItem(k);
-       return { get:function(k){return localStorage.getItem(k);},
-                set:function(k,v){localStorage.setItem(k,v);},
-                del:function(k){localStorage.removeItem(k);} };
-  }catch(e){ var m={};
-       return { get:function(k){return m[k]||null;},
-                set:function(k,v){m[k]=v;}, del:function(k){delete m[k];} }; }
+var store=(function(){
+  try{var k='__t';localStorage.setItem(k,'1');localStorage.removeItem(k);
+    return{get:function(k){return localStorage.getItem(k);},
+           set:function(k,v){localStorage.setItem(k,v);},
+           del:function(k){localStorage.removeItem(k);}};
+  }catch(e){var m={};return{get:function(k){return m[k]||null;},
+    set:function(k,v){m[k]=v;},del:function(k){delete m[k];}};}
 })();
 
-/* ---------------- helpers ---------------- */
-function $(id){ return document.getElementById(id); }
-function el(tag,cls,txt){ var e=document.createElement(tag);
-  if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
-function esc(s){ return String(s==null?'':s)
-  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function nf(n){ return (Number(n)||0).toLocaleString('en-IN'); }
-function dmy(d){ if(!d) return '—'; var x=new Date(d); if(isNaN(x)) return String(d).slice(0,10);
-  return ('0'+x.getDate()).slice(-2)+'/'+('0'+(x.getMonth()+1)).slice(-2); }
-var toastT;
-function toast(msg,bad){ var t=$('toast'); t.textContent=msg;
-  t.className='toast on'+(bad?' bad':''); clearTimeout(toastT);
-  toastT=setTimeout(function(){ t.className='toast'; },2400); }
+function $(i){return document.getElementById(i);}
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function nf(n){return (Number(n)||0).toLocaleString('en-IN');}
+function dmy(d){if(!d)return '—';var x=new Date(d);if(isNaN(x))return String(d).slice(0,10);
+  return ('0'+x.getDate()).slice(-2)+'/'+('0'+(x.getMonth()+1)).slice(-2);}
+var tT;function toast(m,bad){var t=$('toast');t.textContent=m;t.className='toast on'+(bad?' bad':'');
+  clearTimeout(tT);tT=setTimeout(function(){t.className='toast';},2800);}
+function opt(sel,v,t,on){var o=el('option',null,t||v);o.value=v;if(on)o.selected=true;sel.appendChild(o);return o;}
+function lab(b,t){b.appendChild(el('label',null,t));}
+function inp(b,type,ph){var i=el('input');i.type=type||'text';if(ph)i.placeholder=ph;b.appendChild(i);return i;}
 
-/* ---------------- API with offline queue ---------------- */
-function api(action,body){
-  var payload = Object.assign({ action:action, token:S.token }, body||{});
-  return fetch(API,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-                     body:JSON.stringify(payload) })
-    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
-    .then(function(j){
-      if(j.status!=='success'){
-        if(j.code==='AUTH'){ logout(true); }
-        throw new Error(j.message||'Request failed');
-      }
-      return j.data;
-    });
+/* ---------- API + offline ---------- */
+function api(a,body){
+  return fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify(Object.assign({action:a,token:S.token},body||{}))})
+  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+  .then(function(j){if(j.status!=='success'){if(j.code==='AUTH')logout(true);
+    throw new Error(j.message||'Request failed');}return j.data;});
 }
-/* Writes queue locally when the connection or power drops, then replay. */
-function queueWrite(action,body){
-  S.queue.push({ action:action, body:body, at:Date.now() });
-  store.set('hitek_q', JSON.stringify(S.queue));
-  renderSync();
-}
+function queueWrite(a,b){S.queue.push({action:a,body:b});store.set('q',JSON.stringify(S.queue));renderSync();}
 function flushQueue(){
-  if(!S.queue.length || !S.token) return Promise.resolve();
-  var item = S.queue[0];
-  return api(item.action,item.body).then(function(){
-    S.queue.shift(); store.set('hitek_q',JSON.stringify(S.queue));
-    renderSync(); return flushQueue();
-  }).catch(function(){ renderSync(); });
+  if(!S.queue.length||!S.token)return Promise.resolve();
+  var it=S.queue[0];
+  return api(it.action,it.body).then(function(){S.queue.shift();
+    store.set('q',JSON.stringify(S.queue));renderSync();return flushQueue();})
+    .catch(function(){renderSync();});
 }
-function renderSync(){
-  var bar=$('syncbar');
-  if(S.queue.length){ bar.classList.remove('hidden');
-    $('syncmsg').textContent = S.queue.length+' entr'+(S.queue.length>1?'ies':'y')+
-      ' saved on this phone, waiting for network'; }
-  else bar.classList.add('hidden');
-}
+function renderSync(){var b=$('syncbar');
+  if(S.queue.length){b.classList.remove('hidden');
+    $('syncmsg').textContent=S.queue.length+' entr'+(S.queue.length>1?'ies':'y')+' saved on this phone, waiting for network';}
+  else b.classList.add('hidden');}
 
-/* ---------------- roles ---------------- */
-var TABS = {
-  director:  [['work','My work'],['board','Sequence'],['report','Screenshots'],
-              ['stock','Stores'],['scores','Scoreboard'],['admin','Setup']],
-  planner:   [['board','Sequence'],['work','My work'],['report','Screenshots'],
-              ['stock','Stores'],['scores','Scoreboard'],['admin','Setup']],
-  supervisor:[['work','My work'],['board','Sequence'],['report','Screenshots'],
-              ['stock','Stores'],['scores','Scoreboard']],
-  operator:  [['work','माझे काम'],['scores','गुण']],
-  stores:    [['stock','Stores'],['board','Sequence']],
-  office:    [['board','Sequence'],['report','Screenshots'],['stock','Stores']],
-  accounts:  [['report','Screenshots'],['stock','Stores']]
+/* ---------- roles ---------- */
+var TABS={
+  director:[['work','Work'],['tracker','Order tracker'],['docs','Documents'],['board','Sequence'],
+            ['report','Screenshots'],['stock','Stores'],['scores','Scoreboard'],['admin','Setup']],
+  planner:[['tracker','Order tracker'],['work','Work'],['docs','Documents'],['board','Sequence'],
+           ['report','Screenshots'],['stock','Stores'],['scores','Scoreboard'],['admin','Setup']],
+  supervisor:[['work','My department'],['tracker','Order tracker'],['docs','Documents'],
+              ['board','Sequence'],['report','Screenshots'],['stock','Stores'],['scores','Scoreboard']],
+  operator:[['work','माझे काम'],['scores','गुण']],
+  stores:[['stock','Stores'],['tracker','Order tracker'],['docs','Documents']],
+  office:[['tracker','Order tracker'],['docs','Documents'],['board','Sequence'],
+          ['report','Screenshots'],['stock','Stores']],
+  accounts:[['report','Screenshots'],['stock','Stores'],['docs','Documents']]
 };
-function isOperator(){ return S.me && S.me.role==='operator'; }
+function isOp(){return S.me&&S.me.role==='operator';}
+function canAssign(){return ['director','planner','supervisor'].indexOf(S.me.role)>=0;}
 
-/* ---------------- login ---------------- */
-function showLogin(msg){
-  $('app').classList.add('hidden'); $('login').classList.remove('hidden');
-  if(msg){ var m=$('loginMsg'); m.textContent=msg; m.className='msg show'; }
-  $('offhint').textContent = S.queue.length
-    ? S.queue.length+' entries are saved on this phone and will upload after you log in.' : '';
-}
+/* ---------- login ---------- */
+function showLogin(m){$('app').classList.add('hidden');$('login').classList.remove('hidden');
+  if(m){var x=$('loginMsg');x.textContent=m;x.className='msg show';}
+  $('offhint').textContent=S.queue.length?S.queue.length+' entries saved on this phone will upload after login.':'';}
 $('loginForm').addEventListener('submit',function(e){
-  e.preventDefault();
-  var b=$('loginBtn'); b.disabled=true; b.textContent='Checking…';
+  e.preventDefault();var b=$('loginBtn');b.disabled=true;b.textContent='Checking…';
   $('loginMsg').className='msg';
-  fetch(API,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body:JSON.stringify({ action:'LOGIN', username:$('u').value.trim(), password:$('p').value })})
+  fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({action:'LOGIN',username:$('u').value.trim(),password:$('p').value})})
   .then(function(r){return r.json();})
-  .then(function(j){
-    if(j.status!=='success') throw new Error(j.message||'Login failed');
-    S.token=j.data.token; S.me=j.data.user;
-    store.set('hitek_t',S.token); store.set('hitek_u',JSON.stringify(S.me));
-    start();
-  })
-  .catch(function(err){
-    var m=$('loginMsg'); m.textContent=err.message; m.className='msg show';
-  })
-  .then(function(){ b.disabled=false; b.textContent='Log in'; });
+  .then(function(j){if(j.status!=='success')throw new Error(j.message||'Login failed');
+    S.token=j.data.token;S.me=j.data.user;store.set('t',S.token);store.set('me',JSON.stringify(S.me));start();})
+  .catch(function(e){var x=$('loginMsg');x.textContent=e.message;x.className='msg show';})
+  .then(function(){b.disabled=false;b.textContent='Log in';});
 });
-function logout(expired){
-  S.token=null; S.me=null; store.del('hitek_t'); store.del('hitek_u');
-  showLogin(expired?'Your session expired. Please log in again.':'');
-}
-$('logout').addEventListener('click',function(){ logout(false); });
+function logout(exp){S.token=null;S.me=null;store.del('t');store.del('me');
+  showLogin(exp?'Your session expired. Please log in again.':'');}
+$('logout').addEventListener('click',function(){logout(false);});
 
-/* ---------------- boot ---------------- */
+/* ---------- boot ---------- */
 function start(){
-  $('login').classList.add('hidden'); $('app').classList.remove('hidden');
-  $('whoName').textContent = S.me.name+' · '+S.me.role;
-  var tabs=$('tabs'); tabs.innerHTML='';
-  (TABS[S.me.role]||TABS.operator).forEach(function(t,i){
-    var b=el('button','tab'+(i===0?' on':''),t[1]);
-    b.dataset.v=t[0];
-    b.addEventListener('click',function(){ setTab(t[0]); });
-    tabs.appendChild(b);
-    if(i===0) S.tab=t[0];
-  });
-  setTab(S.tab);
-  flushQueue().then(refresh);
+  $('login').classList.add('hidden');$('app').classList.remove('hidden');
+  $('whoName').textContent=S.me.name+' · '+S.me.role;
+  $('stationbar').style.display=(isOp()||S.me.role==='supervisor')?'flex':'none';
+  $('stnName').textContent=S.me.workCentre||'—';
+  var t=$('tabs');t.innerHTML='';
+  (TABS[S.me.role]||TABS.operator).forEach(function(x,i){
+    var b=el('button','tab'+(i?'':' on'),x[1]);b.dataset.v=x[0];
+    b.addEventListener('click',function(){setTab(x[0]);});t.appendChild(b);
+    if(!i)S.tab=x[0];});
+  setTab(S.tab);flushQueue().then(refresh);
 }
-function setTab(v){
-  S.tab=v;
-  Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){
-    b.classList.toggle('on', b.dataset.v===v); });
-  Array.prototype.forEach.call(document.querySelectorAll('.view'),function(s){
-    s.classList.toggle('on', s.id==='v-'+v); });
-  window.scrollTo(0,0);
+function setTab(v){S.tab=v;
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){b.classList.toggle('on',b.dataset.v===v);});
+  Array.prototype.forEach.call(document.querySelectorAll('.view'),function(s){s.classList.toggle('on',s.id==='v-'+v);});
+  window.scrollTo(0,0);}
+function refresh(){return api('bootstrap').then(function(d){S.data=d;
+  renderStop();renderWork();renderTracker();renderDocs();renderBoard();renderReport();
+  renderStock();renderScores();renderAdmin();})
+  .catch(function(e){toast(e.message,true);});}
+
+/* ---------- WORK CENTRE downtime (not per project) ---------- */
+var tick;
+function renderStop(){
+  var o=S.data&&S.data.openStop,bar=$('stopbar');clearInterval(tick);
+  if(!o){bar.classList.add('hidden');return;}
+  bar.classList.remove('hidden');
+  $('stopReason').textContent=o.Reason+(o.WorkCentre?' · '+o.WorkCentre:'');
+  var st=new Date(o.StartTs).getTime();
+  function t(){$('stopTimer').textContent=Math.max(0,Math.round((Date.now()-st)/60000))+' min';}
+  t();tick=setInterval(t,20000);
 }
-function refresh(){
-  return api('bootstrap').then(function(d){
-    S.data=d; renderStop(); renderWork(); renderBoard(); renderReport();
-    renderStock(); renderScores(); renderAdmin();
-  }).catch(function(e){ toast(e.message,true); });
-}
-
-/* ---------------- operator queue ---------------- */
-function myGroup(){
-  var wc=(S.me.workCentre||'').toLowerCase();
-  if(wc.indexOf('bend')>=0||wc.indexOf('brake')>=0) return 'Brake';
-  if(wc.indexOf('laser')>=0) return 'Laser';
-  if(wc.indexOf('powder')>=0) return 'Powder';
-  if(wc.indexOf('ctl')>=0||wc.indexOf('length')>=0) return 'CTL';
-  if(wc.indexOf('weld')>=0) return 'Welding';
-  if(wc.indexOf('grind')>=0) return 'Grinding';
-  return null;
-}
-function renderWork(){
-  var d=S.data; if(!d) return;
-  var mine = d.projects.filter(function(p){ return p.state!=='done'; });
-  var g = myGroup();
-  $('workTitle').textContent = isOperator()
-    ? (S.me.name+' — '+(S.me.workCentre||'')) : 'My work';
-  $('workSub').textContent = isOperator()
-    ? 'सर्वात वरचे काम आधी करा' : 'Tap a job to record work or a stoppage.';
-
-  var q=$('workQueue'); q.innerHTML='';
-  if(!mine.length){ q.appendChild(el('div','emptyq','Nothing open. Good.')); return; }
-  mine.slice(0,14).forEach(function(p){
-    var card=el('div','job '+p.state);
-    var top=el('div','jtop');
-    top.appendChild(el('div','jname',p.Name));
-    top.appendChild(el('div','jmeta','DUE '+dmy(p.PromisedDate)));
-    card.appendChild(top);
-    card.appendChild(el('div','jsub',p.Stage+' · '+p.Division+
-      (p.Blocker?' · ⚠ '+p.Blocker:'')));
-    var row=el('div','jrow');
-    row.appendChild(mk('CR','<b>'+p.cr.toFixed(2)+'</b>'));
-    row.appendChild(mk('Days left','<b>'+p.daysLeft+'</b>'));
-    if(p.remBrake) row.appendChild(mk('Brake min','<b>'+nf(p.remBrake)+'</b>'));
-    card.appendChild(row);
-    card.addEventListener('click',function(){ openSheet(p); });
-    q.appendChild(card);
-  });
-  function mk(l,v){ var s=el('div','jstat'); s.innerHTML='<span class="lbl">'+l+'</span><br>'+v; return s; }
-}
-
-/* ---------------- tap sheet ---------------- */
-
-function openSheet(p){
-  S.sel={ project:p, qty:10 };
-  var b=$('sheetBody'); b.innerHTML='';
-  b.appendChild(el('div','lbl','Order'));
-  b.appendChild(el('div','jname',p.Name));
-  b.appendChild(el('div','jsub',p.Stage+' · due '+dmy(p.PromisedDate)));
-
-  var fams = uniq(S.data.std.map(function(t){return t.Family;}));
-  b.appendChild(lab('Item'));
-  var fsel=el('select'); fsel.id='fFam';
-  fams.forEach(function(f){ var o=el('option',null,f); o.value=f; fsel.appendChild(o); });
-  b.appendChild(fsel);
-
-  b.appendChild(lab('Operation'));
-  var osel=el('select'); osel.id='fOp'; b.appendChild(osel);
-  function fillOps(){
-    osel.innerHTML='';
-    S.data.std.filter(function(t){return t.Family===fsel.value;})
-      .forEach(function(t){ var o=el('option',null,t.Operation); o.value=t.Operation; osel.appendChild(o); });
-  }
-  fsel.addEventListener('change',fillOps); fillOps();
-
-  b.appendChild(lab('Quantity'));
-  var grid=el('div','qtygrid');
-  [1,5,10,25,50,100].forEach(function(n){
-    var q=el('button','qbtn'+(n===10?' sel':''),String(n));
-    q.type='button';
-    q.addEventListener('click',function(){
-      S.sel.qty=n;
-      Array.prototype.forEach.call(grid.children,function(c){c.classList.remove('sel');});
-      q.classList.add('sel');
-    });
-    grid.appendChild(q);
-  });
-  b.appendChild(grid);
-  var other=el('input'); other.type='number'; other.min='1'; other.placeholder='or type an exact count';
-  other.addEventListener('input',function(){
-    if(other.value){ S.sel.qty=Number(other.value);
-      Array.prototype.forEach.call(grid.children,function(c){c.classList.remove('sel');}); }
-  });
-  b.appendChild(other);
-
-  b.appendChild(el('label',null,'Rejected / rework pieces (leave blank if none)'));
-  var rw=el('input'); rw.type='number'; rw.min='0'; rw.id='fRw'; rw.placeholder='0';
-  b.appendChild(rw);
-
-  var done=el('button','bigbtn b-done dev');
-  done.innerHTML='पूर्ण झाले <em>Done</em>';
-  done.addEventListener('click',function(){ submitTap(p,fsel.value,osel.value); });
-  b.appendChild(done);
-
-  var stop=el('button','bigbtn b-stop dev');
-  stop.innerHTML='मशीन बंद <em>Stopped</em>';
-  stop.addEventListener('click',function(){ showReasons(b,p); });
-  b.appendChild(stop);
-
-  $('sheet').classList.remove('hidden');
-  function lab(t){ var l=el('label',null,t); return l; }
-}
-function showReasons(b,p){
-  var old=b.querySelector('.reasons'); if(old) old.remove();
+$('stopBtn').addEventListener('click',function(){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Work centre stopped'));
+  b.appendChild(el('div','top',S.me.workCentre||'—'));
+  b.appendChild(el('p','note','This stops the whole work centre, not one job. Everything queued here is affected.'));
   var wrap=el('div','reasons');
   (S.data.reasons||[]).forEach(function(r){
-    var btn=el('button');
-    btn.innerHTML='<span>'+esc(r[1])+'</span><em>'+r[0]+'</em>';
+    var btn=el('button');btn.innerHTML='<span class="dev">'+esc(r[1])+'</span><em>'+r[0]+'</em>';
     btn.addEventListener('click',function(){
-      send('stopStart',{ code:r[0], workCentre:S.me.workCentre||'' },
-           'बंद नोंदवले — घड्याळ चालू');
-    });
-    wrap.appendChild(btn);
-  });
-  b.appendChild(wrap);
-}
-
-/* ---------------- downtime clock ----------------
-   Nobody types how long the machine was stopped. The clock does it.  */
-var stopTick;
-function renderStop(){
-  var o=S.data && S.data.openStop;
-  var bar=$('stopbar');
-  clearInterval(stopTick);
-  if(!o){ bar.classList.add('hidden'); return; }
-  bar.classList.remove('hidden');
-  $('stopReason').textContent=o.Reason;
-  var start=new Date(o.StartTs).getTime();
-  function tick(){
-    var m=Math.max(0,Math.round((Date.now()-start)/60000));
-    $('stopTimer').textContent=m+' min';
-  }
-  tick(); stopTick=setInterval(tick,20000);
-}
-$('resumeBtn').addEventListener('click',function(){
-  api('stopEnd',{}).then(function(d){
-    toast((d.minutes||0)+' min downtime recorded'); refresh();
-  }).catch(function(){ queueWrite('stopEnd',{}); toast('Saved on this phone'); });
+      closeSheet();
+      api('stopStart',{code:r[0],workCentre:S.me.workCentre||''})
+        .then(function(){toast('बंद नोंदवले — घड्याळ चालू');refresh();})
+        .catch(function(){queueWrite('stopStart',{code:r[0],workCentre:S.me.workCentre||''});
+          toast('Saved on this phone');});
+    });wrap.appendChild(btn);});
+  b.appendChild(wrap);$('sheet').classList.remove('hidden');
 });
-function submitTap(p,family,operation){
-  if(!operation){ toast('Pick an operation',true); return; }
-  var rwEl=$('fRw');
-  send('tap',{ projectID:p.ProjectID, family:family, operation:operation,
-               qty:S.sel.qty, rework:(rwEl&&rwEl.value)?Number(rwEl.value):0 },
-       S.sel.qty+' पूर्ण · logged');
-}
-function send(action,body,okMsg){
-  closeSheet();
-  api(action,body).then(function(){ toast(okMsg); refresh(); })
-    .catch(function(){ queueWrite(action,body);
-      toast('Saved on this phone — will upload when network returns'); });
-}
-function closeSheet(){ $('sheet').classList.add('hidden'); }
-$('sheetClose').addEventListener('click',closeSheet);
-$('sheet').addEventListener('click',function(e){ if(e.target===$('sheet')) closeSheet(); });
-function uniq(a){ return a.filter(function(v,i){ return a.indexOf(v)===i; }); }
+$('resumeBtn').addEventListener('click',function(){
+  api('stopEnd',{workCentre:S.me.workCentre||''}).then(function(d){
+    toast((d.minutes||0)+' min downtime recorded');refresh();})
+    .catch(function(){queueWrite('stopEnd',{workCentre:S.me.workCentre||''});toast('Saved on this phone');});
+});
 
-/* ---------------- board ---------------- */
-var DIRCOL = { Rupali:'var(--rupali)', Ashutosh:'var(--ashutosh)', Mohit:'var(--mohit)' };
-function renderBoard(){
-  var d=S.data; if(!d) return;
-  var L=d.load, pct=L.pctOfWeek;
-  var lc=$('loadCard');
-  lc.innerHTML =
-    '<h2>Pressbrake — this week</h2>'+
-    '<div class="load"><i style="width:'+Math.min(pct,140)/140*100+'%;background:'+
-      (pct>100?'var(--late)':pct>85?'var(--warn)':'var(--ok)')+'"></i>'+
-      '<span class="cap" style="left:'+(100/140*100)+'%"></span></div>'+
-    '<div class="kpi">'+
-      kpi(pct+'%', 'Load', pct>100?'var(--late)':'var(--ok)')+
-      kpi(nf(L.demand),'Minutes owed')+
-      kpi(nf(L.brakeWeek),'Available')+
-      kpi(nf(L.released),'Released to pool','var(--ashutosh)')+
-    '</div>'+
-    '<p class="note" style="margin-top:12px">Floors are guaranteed. '+
-    '<b>'+nf(L.released)+' unused minutes</b> have been released to the shared pool and go to '+
-    'whichever job is closest to its promised date.</p>';
+/* ---------- MY WORK ---------- */
+function renderWork(){
+  var d=S.data;if(!d)return;
+  $('workTitle').textContent=isOp()?(S.me.name+' — '+(S.me.workCentre||''))
+    :(S.me.role==='supervisor'?('Department — '+(S.me.workCentre||'')):'All open tasks');
+  $('workSub').textContent=isOp()?'फक्त तुमच्या नावावरचे काम. सर्वात वरचे आधी करा.'
+    :'Tap a task to record work. Long-press to reassign.';
+  $('otherWork').style.display=isOp()?'block':'none';
 
-  var rows = d.projects.map(function(p){
-    return '<tr class="'+p.state+'">'+
-      '<td><b>'+esc(p.Name)+'</b>'+(p.Blocker?'<br><span class="lbl" style="color:var(--orange)">'+esc(p.Blocker)+'</span>':'')+'</td>'+
-      '<td><span class="dot" style="background:'+(DIRCOL[p.Director]||'var(--steel)')+'"></span>'+esc(p.Director)+'</td>'+
-      '<td>'+esc(p.Stage)+'</td>'+
-      '<td class="num">'+dmy(p.PromisedDate)+'</td>'+
-      '<td class="num">'+(p.remBrake?nf(p.remBrake):'—')+'</td>'+
-      '<td class="num">'+p.daysLeft+'</td>'+
-      '<td class="num"><b>'+(p.state==='done'?'—':p.cr.toFixed(2))+'</b></td>'+
-      '<td><span class="pill p-'+p.state+'">'+
-        (p.state==='done'?'Close':p.state==='late'?'Late':p.state==='tight'?'Tight':'OK')+'</span></td></tr>';
-  }).join('');
-  $('boardTable').innerHTML =
-    '<thead><tr><th>Project</th><th>Owner</th><th>Stage</th><th class="num">Due</th>'+
-    '<th class="num">Brake min</th><th class="num">Days left</th><th class="num">CR</th><th>Status</th></tr></thead>'+
-    '<tbody>'+rows+'</tbody>';
-  function kpi(v,u,c){ return '<div><div class="k"'+(c?' style="color:'+c+'"':'')+'>'+v+'</div>'+
-    '<div class="u">'+u+'</div></div>'; }
-}
-
-/* ---------------- screenshots ---------------- */
-function renderReport(){
-  var d=S.data; if(!d) return;
-  var live = d.projects.filter(function(p){return p.state!=='done';});
-  var late = live.filter(function(p){return p.state==='late';});
-  var tight= live.filter(function(p){return p.state==='tight';});
-  var ship = live.filter(function(p){return p.daysLeft<=1 && p.pos>=11;});
-  var blocked = live.filter(function(p){return p.Blocker;});
-  var closeout= d.projects.filter(function(p){return p.state==='done';});
-  var pct = d.load.pctOfWeek;
-  var now = new Date();
-  var stamp = ('0'+now.getDate()).slice(-2)+'/'+('0'+(now.getMonth()+1)).slice(-2)+'/'+
-              String(now.getFullYear()).slice(-2);
-
-  $('shotDay').innerHTML =
-    head('HI TEK — DAY REPORT','Gujarwadi Plant · 1 of 2',stamp)+
-    '<div class="tiles">'+
-      t('Late now',late.length,late.length?'alert':'')+
-      t('Tight',tight.length)+
-      '<div class="tile wide '+(pct>100?'alert':'')+'"><div class="tl">Pressbrake load this week</div>'+
-        '<div class="tv">'+pct+'%</div><div class="pbar"><i style="width:'+Math.min(pct,100)+'%"></i></div></div>'+
-      tw('Ship tomorrow', ship.length? ship.map(function(p){return p.Name;}).join(' · ') : 'nothing due')+
-      t('Blocked',blocked.length,blocked.length?'alert':'')+
-      t('To close out',closeout.length,'good')+
-      tw('Late projects', late.length? late.map(function(p){return p.Name+' (CR '+p.cr.toFixed(2)+')';}).join(' · ') : 'none')+
-      t('Open projects',live.length)+
-      t('Minutes owed',nf(d.load.demand))+
-    '</div>'+
-    foot('auto-generated','1 / 2');
-
-  /* production, split pre and post lunch */
-  var prod=d.production||[];
-  var byOp={};
-  prod.forEach(function(r){
-    var k=r.Operator+'|'+r.ProjectID+'|'+r.Item+'|'+r.Operation;
-    if(!byOp[k]) byOp[k]={ op:r.Operator, grp:r.Grp||'Other', proj:r.ProjectID,
-                           item:r.Item, am:0, pm:0, min:0 };
-    if(String(r.Session)==='AM') byOp[k].am += Number(r.Qty)||0;
-    else byOp[k].pm += Number(r.Qty)||0;
-    byOp[k].min += Number(r.Minutes)||0;
+  var q=$('workQueue');q.innerHTML='';
+  var list=d.myTasks||[];
+  if(!list.length){q.appendChild(el('div','emptyq',
+    isOp()?'तुमच्यासाठी आत्ता काम नाही. सुपरवायझरला विचारा.':'No open tasks.'));return;}
+  list.forEach(function(t){
+    var c=el('div','task '+(t.state||'ok'));
+    var top=el('div','ttop');
+    top.appendChild(el('div','top',t.Operation));
+    top.appendChild(el('div','tmeta','DUE '+dmy(t.PromisedDate)+' · CR '+(t.cr||0)));
+    c.appendChild(top);
+    c.appendChild(el('div','tproj',t.ProjectName+' · '+(t.WorkCentre||t.Grp)+
+      (t.AssignedTo&&!isOp()?' · '+t.AssignedTo:'')+(t.Note?' · ⚠ '+t.Note:'')));
+    var tgt=Number(t.QtyTarget)||0,dn=Number(t.QtyDone)||0;
+    var bar=el('div','tprog');var i=el('i');
+    i.style.width=(tgt?Math.min(100,dn/tgt*100):0)+'%';bar.appendChild(i);c.appendChild(bar);
+    c.appendChild(el('div','tqty',dn+' / '+tgt+(t.QtyRework?'  ·  '+t.QtyRework+' rework':'')));
+    if(t.noteCount||t.docCount){
+      var ch=el('div','chips');
+      if(t.noteCount)ch.appendChild(el('span','chip on',t.noteCount+' note'+(t.noteCount>1?'s':'')));
+      if(t.docCount)ch.appendChild(el('span','chip',t.docCount+' file'+(t.docCount>1?'s':'')));
+      c.appendChild(ch);
+    }
+    /* pinned notes shout on the card itself — an operator should not have to open anything */
+    (t.notes||[]).filter(function(n){return n.Pinned==='yes';}).slice(0,2).forEach(function(n){
+      var w=el('div','note-item pinned '+(n.Scope==='station'?'station':''));
+      w.appendChild(el('div',null,n.Text));
+      c.appendChild(w);
+    });
+    c.addEventListener('click',function(){openTask(t);});
+    if(canAssign()){
+      var press;
+      c.addEventListener('contextmenu',function(e){e.preventDefault();assignDialog(t);});
+      c.addEventListener('touchstart',function(){press=setTimeout(function(){assignDialog(t);},650);});
+      c.addEventListener('touchend',function(){clearTimeout(press);});
+    }
+    q.appendChild(c);
   });
-  var lines=Object.keys(byOp).map(function(k){return byOp[k];});
-  var pname={}; d.projects.forEach(function(p){ pname[p.ProjectID]=p.Name; });
-  var groups={};
-  lines.forEach(function(l){ (groups[l.grp]=groups[l.grp]||[]).push(l); });
+}
+function openTask(t,off){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl',off?'Other work (off station)':'Record work'));
+  b.appendChild(el('div','top',t.Operation));
+  b.appendChild(el('div','tproj',t.ProjectName+' · '+(t.WorkCentre||t.Grp)));
 
+  /* --- notes first: instructions before action --- */
+  if((t.notes||[]).length){
+    var nw=el('div','notes');
+    t.notes.forEach(function(n){
+      var it=el('div','note-item'+(n.Pinned==='yes'?' pinned':'')+(n.Scope==='station'?' station':''));
+      it.appendChild(el('div',null,n.Text));
+      it.appendChild(el('div','nmeta',(n.Scope==='station'?'STANDING · ':n.Scope==='project'?'PROJECT · ':'')+
+        n.By+' · '+dmy(n.Date)));
+      nw.appendChild(it);
+    });
+    b.appendChild(nw);
+  }
+  /* --- documents: drawing, BOQ, job card, right where the work happens --- */
+  if((t.docs||[]).length){
+    var tr=el('div','thumbrow');
+    t.docs.slice(0,8).forEach(function(d){
+      var a=el('a');a.href=d.Url;a.target='_blank';a.rel='noopener';
+      a.title=d.Kind+' — '+d.Name;
+      if(String(d.Mime).indexOf('image')===0)a.style.backgroundImage='url('+d.ThumbUrl+')';
+      else a.textContent='PDF';
+      tr.appendChild(a);});
+    b.appendChild(tr);
+  }
+  var actions=el('div','chips');
+  var bNote=el('button','chip');bNote.textContent='+ Note';
+  bNote.addEventListener('click',function(){noteDialog(t);});
+  var bFile=el('button','chip');bFile.textContent='+ Photo / file';
+  bFile.addEventListener('click',function(){uploadDialog(t.ProjectID,t.TaskID);});
+  actions.appendChild(bNote);actions.appendChild(bFile);
+  b.appendChild(actions);
+
+  lab(b,'Item');
+  var fs=el('select');
+  var fams=(S.data.std||[]).filter(function(x){return x.Operation===t.Operation;})
+                           .map(function(x){return x.Family;});
+  if(!fams.length) fams=(S.data.items||[]).map(function(x){return x.Family;});
+  fams.filter(function(v,i,a){return a.indexOf(v)===i;}).forEach(function(f){opt(fs,f);});
+  b.appendChild(fs);
+
+  if(off){ lab(b,'Which work centre'); var wc=el('select');
+    (S.data.workCentres||[]).forEach(function(w){opt(wc,w.Name);});b.appendChild(wc); }
+
+  lab(b,'Quantity');
+  S.sel={qty:10};
+  var g=el('div','qtygrid');
+  [1,5,10,25,50,100].forEach(function(n){
+    var q=el('button','qbtn'+(n===10?' sel':''),String(n));q.type='button';
+    q.addEventListener('click',function(){S.sel.qty=n;
+      Array.prototype.forEach.call(g.children,function(c){c.classList.remove('sel');});q.classList.add('sel');});
+    g.appendChild(q);});
+  b.appendChild(g);
+  var ex=inp(b,'number','or type an exact count');
+  ex.addEventListener('input',function(){if(ex.value){S.sel.qty=Number(ex.value);
+    Array.prototype.forEach.call(g.children,function(c){c.classList.remove('sel');});}});
+
+  lab(b,'Rejected / rework pieces (blank if none)');
+  var rw=inp(b,'number','0');
+
+  var done=el('button','bigbtn b-done dev');done.innerHTML='पूर्ण झाले <em>Done</em>';
+  done.addEventListener('click',function(){
+    var body={taskID:t.TaskID,family:fs.value,qty:S.sel.qty,
+      rework:rw.value?Number(rw.value):0,
+      workCentre:off?wc.value:(t.WorkCentre||S.me.workCentre||''),offStation:off?1:0};
+    closeSheet();
+    api('tap',body).then(function(r){
+      toast(r.finished?('Task complete → '+(r.next||'')):(S.sel.qty+' पूर्ण · logged'));
+      refresh();
+    }).catch(function(e){
+      if(String(e.message).indexOf('assigned to')>=0){toast(e.message,true);return;}
+      queueWrite('tap',body);toast('Saved on this phone');});
+  });
+  b.appendChild(done);
+
+  if(!off){
+    var fin=el('button','bigbtn b-stop dev');fin.innerHTML='हे काम संपले <em>Task finished</em>';
+    fin.addEventListener('click',function(){closeSheet();
+      api('completeTask',{taskID:t.TaskID}).then(function(r){
+        toast('Passed to '+(r.next||'next station'));refresh();})
+        .catch(function(e){toast(e.message,true);});});
+    b.appendChild(fin);
+  }
+  $('sheet').classList.remove('hidden');
+}
+$('otherWork').addEventListener('click',function(){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Work you did somewhere else today'));
+  b.appendChild(el('p','note','Pick the task you actually worked on. Your supervisor will see this was off your own station.'));
+  lab(b,'Task');
+  var ts=el('select');
+  (S.data.tasks||[]).filter(function(t){return ['ready','running'].indexOf(String(t.Status))>=0;})
+    .forEach(function(t){opt(ts,t.TaskID,t.ProjectName+' — '+t.Operation+
+      (t.AssignedTo?' ('+t.AssignedTo+')':''));});
+  b.appendChild(ts);
+  var go=el('button','bigbtn b-done');go.textContent='Continue';
+  go.addEventListener('click',function(){
+    var t=(S.data.tasks||[]).filter(function(x){return x.TaskID===ts.value;})[0];
+    if(t) openTask(t,true);});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+});
+function assignDialog(t){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Assign task'));
+  b.appendChild(el('div','top',t.Operation));
+  b.appendChild(el('div','tproj',t.ProjectName));
+  lab(b,'Give it to');
+  var us=el('select');opt(us,'','— unassigned —');
+  (S.data.users||[]).forEach(function(u){opt(us,u.Name,u.Name+' ('+(u.WorkCentre||u.Role)+')',u.Name===t.AssignedTo);});
+  b.appendChild(us);
+  var go=el('button','bigbtn b-done');go.textContent='Save';
+  go.addEventListener('click',function(){closeSheet();
+    api('assignTask',{taskID:t.TaskID,to:us.value}).then(function(){toast('Reassigned');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+}
+function closeSheet(){$('sheet').classList.add('hidden');}
+$('sheetClose').addEventListener('click',closeSheet);
+$('sheet').addEventListener('click',function(e){if(e.target===$('sheet'))closeSheet();});
+
+/* ---------- NOTES ---------- */
+function noteDialog(t,projectOnly){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Add a note'));
+  b.appendChild(el('div','top',projectOnly?t.Name:t.Operation));
+  b.appendChild(el('div','tproj',projectOnly?'':t.ProjectName));
+  lab(b,'Note');
+  var ta=el('textarea');ta.rows=4;ta.placeholder='e.g. Customer wants hinges on the right side';
+  b.appendChild(ta);
+  var scope='task',pinned=false;
+  if(!projectOnly&&canAssign()){
+    lab(b,'Who should see this');
+    var sc=el('select');
+    opt(sc,'task','Only this task');
+    opt(sc,'project','Everyone on this project');
+    opt(sc,'station','Standing instruction for '+(t.WorkCentre||t.Grp)+' — shows on every job here');
+    b.appendChild(sc);
+    lab(b,'Show it on the job card itself');
+    var pn=el('select');opt(pn,'','No, keep it inside');opt(pn,'yes','Yes, pin it');b.appendChild(pn);
+  }
+  var go=el('button','bigbtn b-done');go.textContent='Save note';
+  go.addEventListener('click',function(){
+    if(!ta.value.trim()){toast('Note is empty',true);return;}
+    if(sc){scope=sc.value;pinned=(pn.value==='yes');}
+    if(projectOnly){scope='project';}
+    closeSheet();
+    api('addNote',{text:ta.value,scope:scope,pinned:pinned?1:0,
+      projectID:projectOnly?t.ProjectID:t.ProjectID,taskID:projectOnly?'':t.TaskID,
+      workCentre:t.WorkCentre||'',operation:t.Operation||''})
+      .then(function(){toast('Note saved');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+}
+
+/* ---------- DOCUMENTS ----------
+   Images are resized and re-compressed IN THE BROWSER before upload.
+   A 4 MB phone photo becomes about 150 KB, which is what makes this
+   workable on a shop-floor connection and inside Apps Script limits. */
+function compress(file,maxPx,quality){
+  return new Promise(function(res,rej){
+    if(String(file.type).indexOf('image')!==0){
+      var fr=new FileReader();
+      fr.onload=function(){res({data:fr.result.split(',')[1],mime:file.type,name:file.name});};
+      fr.onerror=rej;fr.readAsDataURL(file);return;
+    }
+    var img=new Image(),url=URL.createObjectURL(file);
+    img.onload=function(){
+      var w=img.width,h=img.height,m=maxPx||1600;
+      if(w>m||h>m){ if(w>h){h=Math.round(h*m/w);w=m;} else {w=Math.round(w*m/h);h=m;} }
+      var cv=document.createElement('canvas');cv.width=w;cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      var d=cv.toDataURL('image/jpeg',quality||0.72);
+      res({data:d.split(',')[1],mime:'image/jpeg',
+           name:(file.name||'photo').replace(/\.[^.]+$/,'')+'.jpg'});
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);rej(new Error('Could not read that image'));};
+    img.src=url;
+  });
+}
+var UP={projectID:'',taskID:'',kind:'Other',caption:''};
+function uploadDialog(projectID,taskID){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Upload a file'));
+  lab(b,'Project');
+  var ps=el('select');
+  (S.data.projects||[]).forEach(function(p){opt(ps,p.ProjectID,p.Name,p.ProjectID===projectID);});
+  b.appendChild(ps);
+  lab(b,'Attach to a specific task (optional)');
+  var ts=el('select');opt(ts,'','— whole project —');
+  (S.data.tasks||[]).filter(function(t){return t.ProjectID===(projectID||ps.value);})
+    .forEach(function(t){opt(ts,t.TaskID,t.Operation+' · '+(t.AssignedTo||'unassigned'),t.TaskID===taskID);});
+  b.appendChild(ts);
+  ps.addEventListener('change',function(){
+    ts.innerHTML='';opt(ts,'','— whole project —');
+    (S.data.tasks||[]).filter(function(t){return t.ProjectID===ps.value;})
+      .forEach(function(t){opt(ts,t.TaskID,t.Operation+' · '+(t.AssignedTo||'unassigned'));});});
+  lab(b,'What is it');
+  var ks=el('select');(S.data.docKinds||['Other']).forEach(function(k){opt(ks,k);});b.appendChild(ks);
+  lab(b,'Caption (optional)');var cp=inp(b,'text','e.g. site measurement, left elevation');
+  var bar=el('div','upbar');var bi=el('i');bar.appendChild(bi);b.appendChild(bar);
+  var go=el('button','bigbtn b-done');go.textContent='Choose file / take photo';
+  go.addEventListener('click',function(){
+    UP={projectID:ps.value,taskID:ts.value,kind:ks.value,caption:cp.value,bar:bi,btn:go};
+    $('filePick').click();});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+}
+$('filePick').addEventListener('change',function(e){
+  var f=e.target.files&&e.target.files[0];
+  e.target.value='';
+  if(!f)return;
+  if(UP.btn){UP.btn.disabled=true;UP.btn.textContent='Compressing…';}
+  if(UP.bar)UP.bar.style.width='25%';
+  compress(f,1600,0.72).then(function(out){
+    if(UP.bar)UP.bar.style.width='60%';
+    if(UP.btn)UP.btn.textContent='Uploading…';
+    return api('upload',{projectID:UP.projectID,taskID:UP.taskID,kind:UP.kind,
+      caption:UP.caption,name:out.name,mime:out.mime,data:out.data,
+      workCentre:S.me.workCentre||''});
+  }).then(function(){
+    if(UP.bar)UP.bar.style.width='100%';
+    closeSheet();toast('File uploaded');refresh();
+  }).catch(function(err){
+    if(UP.btn){UP.btn.disabled=false;UP.btn.textContent='Choose file / take photo';}
+    if(UP.bar)UP.bar.style.width='0';
+    toast(err.message||'Upload failed',true);
+  });
+});
+$('uploadBtn').addEventListener('click',function(){uploadDialog('','');});
+function renderDocs(){
+  var d=S.data;if(!d)return;
+  var f=$('docFilter');
+  if(!f.options.length){
+    opt(f,'all','All projects');
+    (d.projects||[]).forEach(function(p){opt(f,p.ProjectID,p.Name);});
+    f.addEventListener('change',renderDocs);
+  }
+  var v=f.value||'all';
+  var docs=[];
+  (d.tasks||[]).forEach(function(t){(t.docs||[]).forEach(function(x){
+    if(docs.filter(function(y){return y.DocID===x.DocID;}).length===0)docs.push(x);});});
+  (d.projects||[]).forEach(function(p){(p.docs||[]).forEach(function(x){
+    if(docs.filter(function(y){return y.DocID===x.DocID;}).length===0)docs.push(x);});});
+  if(v!=='all')docs=docs.filter(function(x){return x.ProjectID===v;});
+  docs.sort(function(a,b){return new Date(b.Ts)-new Date(a.Ts);});
+  var g=$('docGrid');g.innerHTML='';
+  if(!docs.length){g.appendChild(el('div','emptyq','No documents yet. Upload a BOQ, a measurement sheet or a site photo.'));return;}
+  var pn={};(d.projects||[]).forEach(function(p){pn[p.ProjectID]=p.Name;});
+  docs.forEach(function(x){
+    var c=el('div','doc');
+    var a=el('a','thumb');a.href=x.Url;a.target='_blank';a.rel='noopener';
+    if(String(x.Mime).indexOf('image')===0)a.style.backgroundImage='url('+x.ThumbUrl+')';
+    else{var ic=el('div','ficon',(String(x.Name).split('.').pop()||'FILE').toUpperCase());a.appendChild(ic);}
+    c.appendChild(a);
+    var bd=el('div','dbody');
+    bd.appendChild(el('div','dkind',x.Kind));
+    bd.appendChild(el('div','dname',x.Caption||x.Name));
+    bd.appendChild(el('div','dmeta',(pn[x.ProjectID]||x.ProjectID||'—')+' · '+x.By+' · '+dmy(x.Date)));
+    c.appendChild(bd);
+    if(canAssign()){
+      var act=el('div','dact');
+      var del=el('button','linkbtn','Remove');
+      del.addEventListener('click',function(){
+        api('delDoc',{docID:x.DocID}).then(function(){toast('Removed');refresh();})
+          .catch(function(e){toast(e.message,true);});});
+      act.appendChild(del);c.appendChild(act);
+    }
+    g.appendChild(c);
+  });
+}
+
+/* ---------- ORDER TRACKER ---------- */
+function renderTracker(){
+  var d=S.data;if(!d)return;
+  var f=$('trackFilter');
+  if(!f.options.length){
+    opt(f,'open','Open projects');opt(f,'all','All projects');opt(f,'late','Late only');
+    ['Rupali','Ashutosh','Mohit'].forEach(function(x){opt(f,'dir:'+x,x+"'s projects");});
+    f.addEventListener('change',renderTracker);
+  }
+  var v=f.value||'open';
+  var list=(d.projects||[]).filter(function(p){
+    if(v==='all')return true;
+    if(v==='late')return p.state==='late';
+    if(v.indexOf('dir:')===0)return p.Director===v.slice(4);
+    return p.state!=='done';});
+  var wrap=$('trackList');wrap.innerHTML='';
+  if(!list.length){wrap.appendChild(el('div','emptyq','Nothing here.'));return;}
+  list.forEach(function(p){
+    var c=el('div','trk');
+    var h=el('div','trkhead');
+    h.appendChild(el('b',null,p.Name));
+    var meta=el('div','tmeta',p.Director+' · due '+dmy(p.PromisedDate)+
+      ' · CR '+(p.cr||0)+' · '+p.pct+'% done');
+    h.appendChild(meta);c.appendChild(h);
+    if(p.Blocker) c.appendChild(el('div','tproj','⚠ '+p.Blocker));
+    var tasks=(d.tasks||[]).filter(function(t){return t.ProjectID===p.ProjectID;})
+      .sort(function(a,b){return Number(a.Seq)-Number(b.Seq);});
+    var pipe=el('div','pipe');
+    tasks.forEach(function(t){
+      var st=String(t.Status);
+      var s=el('div','step '+st);
+      s.appendChild(el('div','sn',String(t.Seq)));
+      s.appendChild(el('div','st',t.Operation));
+      s.appendChild(el('div','sw',(t.AssignedTo||'—')+
+        (st==='running'?' · '+t.QtyDone+'/'+t.QtyTarget:'')));
+      if(canAssign()) s.addEventListener('click',function(){assignDialog(t);});
+      pipe.appendChild(s);});
+    c.appendChild(pipe);
+    var ch=el('div','chips');
+    if((p.docs||[]).length)ch.appendChild(el('span','chip',p.docs.length+' file'+(p.docs.length>1?'s':'')));
+    if(canAssign()){
+      var bn=el('button','chip');bn.textContent='+ Note';
+      bn.addEventListener('click',function(){noteDialog(p,true);});
+      var bf=el('button','chip');bf.textContent='+ File';
+      bf.addEventListener('click',function(){uploadDialog(p.ProjectID,'');});
+      ch.appendChild(bn);ch.appendChild(bf);
+    }
+    c.appendChild(ch);
+    (p.notes||[]).slice(0,3).forEach(function(n){
+      var it=el('div','note-item'+(n.Pinned==='yes'?' pinned':''));
+      it.appendChild(el('div',null,n.Text));
+      it.appendChild(el('div','nmeta',n.By+' · '+dmy(n.Date)));
+      c.appendChild(it);});
+    wrap.appendChild(c);
+  });
+}
+
+/* ---------- SEQUENCE ---------- */
+var DIRCOL={Rupali:'var(--rupali)',Ashutosh:'var(--ashutosh)',Mohit:'var(--mohit)'};
+function renderBoard(){
+  var d=S.data;if(!d)return;var L=d.load,pct=L.pctOfWeek;
+  $('loadCard').innerHTML='<h2>Pressbrake — this week</h2>'+
+    '<div class="load"><i style="width:'+Math.min(pct,140)/140*100+'%;background:'+
+    (pct>100?'var(--late)':pct>85?'var(--warn)':'var(--ok)')+'"></i>'+
+    '<span class="cap" style="left:'+(100/140*100)+'%"></span></div><div class="kpi">'+
+    k(pct+'%','Load',pct>100?'var(--late)':'var(--ok)')+k(nf(L.demand),'Minutes owed')+
+    k(nf(L.brakeWeek),'Available')+k(nf(L.released),'Released to pool','var(--ashutosh)')+'</div>';
+  $('boardTable').innerHTML='<thead><tr><th>Project</th><th>Owner</th><th>At</th>'+
+    '<th class="num">Due</th><th class="num">Brake</th><th class="num">Days</th>'+
+    '<th class="num">CR</th><th class="num">Done</th><th>Status</th></tr></thead><tbody>'+
+    (d.projects||[]).map(function(p){
+      return '<tr class="'+p.state+'"><td><b>'+esc(p.Name)+'</b>'+
+        (p.Blocker?'<br><span class="lbl" style="color:var(--orange)">'+esc(p.Blocker)+'</span>':'')+'</td>'+
+        '<td><span class="dot" style="background:'+(DIRCOL[p.Director]||'var(--steel)')+'"></span>'+esc(p.Director)+'</td>'+
+        '<td>'+esc(p.Stage)+'</td><td class="num">'+dmy(p.PromisedDate)+'</td>'+
+        '<td class="num">'+(p.remBrake?nf(p.remBrake):'—')+'</td>'+
+        '<td class="num">'+p.daysLeft+'</td>'+
+        '<td class="num"><b>'+(p.state==='done'?'—':p.cr)+'</b></td>'+
+        '<td class="num">'+p.pct+'%</td>'+
+        '<td><span class="pill p-'+p.state+'">'+(p.state==='done'?'Close':
+          p.state==='late'?'Late':p.state==='tight'?'Tight':'OK')+'</span></td></tr>';}).join('')+'</tbody>';
+  function k(v,u,c){return '<div><div class="k"'+(c?' style="color:'+c+'"':'')+'>'+v+'</div><div class="u">'+u+'</div></div>';}
+}
+
+/* ---------- SCREENSHOTS ---------- */
+function renderReport(){
+  var d=S.data;if(!d)return;
+  var live=(d.projects||[]).filter(function(p){return p.state!=='done';});
+  var late=live.filter(function(p){return p.state==='late';});
+  var tight=live.filter(function(p){return p.state==='tight';});
+  var blocked=live.filter(function(p){return p.Blocker;});
+  var ship=live.filter(function(p){return p.daysLeft<=1&&p.pos>=11;});
+  var pct=d.load.pctOfWeek,now=new Date();
+  var stamp=('0'+now.getDate()).slice(-2)+'/'+('0'+(now.getMonth()+1)).slice(-2)+'/'+String(now.getFullYear()).slice(-2);
+  var hh=('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
+  function head(a,b){return '<div class="sh"><div><b>'+a+'</b><small>'+b+'</small></div>'+
+    '<div class="sd">'+stamp+'<br>'+hh+'</div></div>';}
+  function t(l,v,c){return '<div class="tile '+(c||'')+'"><div class="tl">'+l+'</div><div class="tv">'+v+'</div></div>';}
+  function tw(l,v){return '<div class="tile wide"><div class="tl">'+l+'</div><div class="tv sm">'+esc(v)+'</div></div>';}
+
+  $('shotDay').innerHTML=head('HI TEK — DAY REPORT','Gujarwadi · 1 of 2')+'<div class="tiles">'+
+    t('Late now',late.length,late.length?'alert':'')+t('Tight',tight.length)+
+    '<div class="tile wide '+(pct>100?'alert':'')+'"><div class="tl">Pressbrake load this week</div>'+
+    '<div class="tv">'+pct+'%</div><div class="pbar"><i style="width:'+Math.min(pct,100)+'%"></i></div></div>'+
+    tw('Ship tomorrow',ship.length?ship.map(function(p){return p.Name;}).join(' · '):'nothing due')+
+    t('Blocked',blocked.length,blocked.length?'alert':'')+t('Open projects',live.length)+
+    tw('Late projects',late.length?late.map(function(p){return p.Name+' (CR '+p.cr+')';}).join(' · '):'none')+
+    t('Low stock',d.stock.filter(function(i){return Number(i.Qty)<=Number(i.ReorderLevel||0);}).length,'alert')+
+    t('Minutes owed',nf(d.load.demand))+
+    '</div><div class="shotfoot"><span>auto-generated</span><span>1 / 2</span></div>';
+
+  var byKey={};
+  (d.production||[]).forEach(function(r){
+    var k=r.Operator+'|'+r.ProjectID+'|'+r.Item+'|'+r.Operation;
+    if(!byKey[k])byKey[k]={op:r.Operator,grp:r.Grp||r.WorkCentre||'Other',proj:r.ProjectID,
+      item:r.Item,oper:r.Operation,am:0,pm:0,min:0,off:r.OffStation?1:0};
+    if(String(r.Session)==='AM')byKey[k].am+=Number(r.Qty)||0;else byKey[k].pm+=Number(r.Qty)||0;
+    byKey[k].min+=Number(r.EarnedMin)||0;});
+  var lines=Object.keys(byKey).map(function(k){return byKey[k];});
+  var pn={};(d.projects||[]).forEach(function(p){pn[p.ProjectID]=p.Name;});
+  var groups={};lines.forEach(function(l){(groups[l.grp]=groups[l.grp]||[]).push(l);});
   var body='';
   Object.keys(groups).forEach(function(g){
     body+='<tr class="dept"><td colspan="5">'+esc(g)+'</td></tr>';
     groups[g].forEach(function(l){
-      body+='<tr><td><span class="who2">'+esc(l.op)+'</span><br><span class="ord">'+
-        esc(pname[l.proj]||l.proj)+'</span></td><td>'+esc(l.item)+'</td>'+
-        '<td class="n">'+l.am+'</td><td class="n">'+l.pm+'</td>'+
-        '<td class="n">'+(l.am+l.pm)+'</td></tr>';
-    });
-  });
-  var tAM=lines.reduce(function(s,l){return s+l.am;},0);
-  var tPM=lines.reduce(function(s,l){return s+l.pm;},0);
-  var tMin=lines.reduce(function(s,l){return s+l.min;},0);
-  if(!lines.length) body='<tr><td colspan="5" style="text-align:center;color:#8a939c;padding:16px">No taps recorded yet today</td></tr>';
-  else body+='<tr class="tot"><td>TOTAL PIECES</td><td></td><td class="n">'+tAM+'</td>'+
-             '<td class="n">'+tPM+'</td><td class="n">'+(tAM+tPM)+'</td></tr>'+
-             '<tr class="tot"><td>STD MIN EARNED</td><td></td><td class="n" colspan="3">'+nf(Math.round(tMin))+'</td></tr>';
-
-  $('shotProd').innerHTML =
-    head('PRODUCTION','Gujarwadi Plant · 2 of 2',stamp)+
-    '<table class="pt"><thead><tr><th>Who / Order</th><th>Item</th>'+
-    '<th class="n">9–1</th><th class="n">1:30–6</th><th class="n">Tot</th></tr></thead>'+
-    '<tbody>'+body+'</tbody></table>'+
-    foot((d.downtime||[]).length+' stoppages logged','2 / 2');
-
-  function head(a,b,dt){ return '<div class="sh"><div><b>'+a+'</b><small>'+b+'</small></div>'+
-    '<div class="sd">'+dt+'<br>'+('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2)+'</div></div>'; }
-  function foot(a,b){ return '<div class="shotfoot"><span>'+a+'</span><span>'+b+'</span></div>'; }
-  function t(l,v,cls){ return '<div class="tile '+(cls||'')+'"><div class="tl">'+l+'</div><div class="tv">'+v+'</div></div>'; }
-  function tw(l,v){ return '<div class="tile wide"><div class="tl">'+l+'</div><div class="tv sm">'+esc(v)+'</div></div>'; }
+      body+='<tr><td><span class="who2">'+esc(l.op)+(l.off?' *':'')+'</span><br>'+
+        '<span class="ord">'+esc(pn[l.proj]||l.proj)+' · '+esc(l.oper)+'</span></td>'+
+        '<td>'+esc(l.item)+'</td><td class="n">'+l.am+'</td><td class="n">'+l.pm+'</td>'+
+        '<td class="n">'+(l.am+l.pm)+'</td></tr>';});});
+  var aM=lines.reduce(function(s,l){return s+l.am;},0),pM=lines.reduce(function(s,l){return s+l.pm;},0);
+  var mn=lines.reduce(function(s,l){return s+l.min;},0);
+  if(!lines.length)body='<tr><td colspan="5" style="text-align:center;color:#8a939c;padding:16px">No taps recorded yet today</td></tr>';
+  else body+='<tr class="tot"><td>TOTAL PIECES</td><td></td><td class="n">'+aM+'</td>'+
+    '<td class="n">'+pM+'</td><td class="n">'+(aM+pM)+'</td></tr>'+
+    '<tr class="tot"><td>STD MIN EARNED</td><td></td><td class="n" colspan="3">'+nf(Math.round(mn))+'</td></tr>';
+  var dn=(d.downtime||[]).reduce(function(s,x){return s+(Number(x.Minutes)||0);},0);
+  $('shotProd').innerHTML=head('PRODUCTION','Gujarwadi · 2 of 2')+
+    '<table class="pt"><thead><tr><th>Who / Order</th><th>Item</th><th class="n">9–1</th>'+
+    '<th class="n">1:30–6</th><th class="n">Tot</th></tr></thead><tbody>'+body+'</tbody></table>'+
+    '<div class="shotfoot"><span>'+dn+' min downtime · * = off station</span><span>2 / 2</span></div>';
 }
 
-/* ---------------- admin ---------------- */
-function renderAdmin(){
-  var d=S.data; if(!d) return;
-  if(['director','planner'].indexOf(S.me.role)<0) return;
-  var pool=d.load.pool, html='<h2>Quota floors</h2><div class="tblwrap"><table class="d">'+
-    '<thead><tr><th>Director</th><th class="num">Floor %</th><th class="num">Floor min</th>'+
-    '<th class="num">Demand</th><th class="num">Released</th></tr></thead><tbody>';
-  Object.keys(pool).forEach(function(k){
-    html+='<tr><td><span class="dot" style="background:'+(DIRCOL[k]||'')+'"></span>'+k+'</td>'+
-      '<td class="num">'+Math.round(Number(d.config['quota_'+k]||0)*100)+'%</td>'+
-      '<td class="num">'+nf(pool[k].floor)+'</td>'+
-      '<td class="num">'+nf(pool[k].demand)+'</td>'+
-      '<td class="num" style="color:var(--ashutosh)">'+nf(pool[k].unused)+'</td></tr>';
-  });
-  html+='</tbody></table></div><p class="note" style="margin-top:10px">Change floors in the '+
-        '<b>Config</b> sheet (quota_Rupali, quota_Ashutosh, quota_Mohit). '+
-        'Released minutes flow to whichever job has the lowest Critical Ratio.</p>';
-  $('quotaCard').innerHTML=html;
-
-  $('projTable').innerHTML =
-    '<thead><tr><th>ID</th><th>Project</th><th>Director</th><th>Size</th><th>Stage</th>'+
-    '<th class="num">Due</th></tr></thead><tbody>'+
-    d.projects.map(function(p){ return '<tr><td class="mono">'+esc(p.ProjectID)+'</td><td>'+esc(p.Name)+
-      '</td><td>'+esc(p.Director)+'</td><td>'+esc(p.Size)+'</td>'+
-      '<td>'+stageSelect(p)+'</td><td class="num">'+dmy(p.PromisedDate)+'</td></tr>'; }).join('')+
-    '</tbody>';
-  Array.prototype.forEach.call($('projTable').querySelectorAll('select[data-pid]'),function(sel){
-    sel.addEventListener('change',function(){
-      api('saveProject',{row:{ProjectID:sel.dataset.pid,Stage:sel.value}})
-        .then(function(){ toast('Stage updated'); refresh(); })
-        .catch(function(e){ toast(e.message,true); });
-    });
-  });
-
-  $('stdTable').innerHTML =
-    '<thead><tr><th>Family</th><th>Operation</th><th>Group</th><th class="num">Setup</th>'+
-    '<th class="num">Target</th><th class="num">Plan (learned)</th><th class="num">Runs</th></tr></thead><tbody>'+
-    d.std.map(function(t){
-      var tgt=Number(t.TargetMin)||0, pl=Number(t.PlanMin)||tgt;
-      var diff=tgt? Math.round((pl/tgt-1)*100):0;
-      return '<tr><td>'+esc(t.Family)+'</td><td>'+esc(t.Operation)+'</td><td>'+esc(t.Grp)+
-        '</td><td class="num">'+t.SetupMin+'</td><td class="num"><b>'+tgt+'</b></td>'+
-        '<td class="num">'+pl+(diff?' <span class="lbl" style="color:'+
-          (diff>0?'var(--late)':'var(--ok)')+'">'+(diff>0?'+':'')+diff+'%</span>':'')+'</td>'+
-        '<td class="num">'+(t.Samples||0)+'</td></tr>'; }).join('')+'</tbody>';
-
-  function stageSelect(p){
-    return '<select data-pid="'+esc(p.ProjectID)+'">'+
-      S.data.stages.map(function(s){ return '<option'+(s===p.Stage?' selected':'')+'>'+s+'</option>'; })
-      .join('')+'</select>';
-  }
-}
-
-/* ---------------- stores ---------------- */
+/* ---------- STORES ---------- */
 function renderStock(){
-  var d=S.data; if(!d||!d.stock) return;
-  $('stockTable').innerHTML =
-    '<thead><tr><th>Item</th><th>Type</th><th class="num">Qty</th><th>Unit</th>'+
-    '<th class="num">Reorder</th><th class="num">Lead</th><th></th></tr></thead><tbody>'+
-    d.stock.map(function(i){
-      var low=Number(i.Qty)<=Number(i.ReorderLevel||0);
+  var d=S.data;if(!d||!d.stock)return;
+  $('stockTable').innerHTML='<thead><tr><th>Item</th><th>Type</th><th class="num">Qty</th>'+
+    '<th>Unit</th><th class="num">Reorder</th><th class="num">Lead</th><th></th></tr></thead><tbody>'+
+    d.stock.map(function(i){var low=Number(i.Qty)<=Number(i.ReorderLevel||0);
       return '<tr><td>'+esc(i.Thickness)+'mm · '+esc(i.Width)+'x'+esc(i.Length)+
-        (i.Grade?'<br><span class="lbl">'+esc(i.Grade)+'</span>':'')+'</td>'+
-        '<td>'+esc(i.Type)+'</td>'+
+        (i.Grade?'<br><span class="lbl">'+esc(i.Grade)+'</span>':'')+'</td><td>'+esc(i.Type)+'</td>'+
         '<td class="num'+(low?' low':'')+'"><b>'+i.Qty+'</b></td><td>'+esc(i.Unit)+'</td>'+
         '<td class="num">'+i.ReorderLevel+'</td><td class="num">'+i.LeadDays+'d</td>'+
-        '<td>'+moveBtns('stock',i.ItemID)+'</td></tr>'; }).join('')+'</tbody>';
-
-  $('powderTable').innerHTML =
-    '<thead><tr><th>Shade</th><th>Make</th><th>Finish</th><th class="num">Kg</th>'+
-    '<th class="num">Sqft left</th><th class="num">Reorder</th><th></th></tr></thead><tbody>'+
-    d.powder.map(function(p){
-      var low=Number(p.StockKg)<=Number(p.ReorderKg||0);
+        '<td>'+mv('stock',i.ItemID)+'</td></tr>';}).join('')+'</tbody>';
+  $('powderTable').innerHTML='<thead><tr><th>Shade</th><th>Make</th><th>Finish</th>'+
+    '<th class="num">Kg</th><th class="num">Sqft left</th><th class="num">Reorder</th><th></th></tr></thead><tbody>'+
+    d.powder.map(function(p){var low=Number(p.StockKg)<=Number(p.ReorderKg||0);
       return '<tr><td><b>'+esc(p.Shade)+'</b></td><td>'+esc(p.Make)+'</td><td>'+esc(p.Finish)+'</td>'+
         '<td class="num'+(low?' low':'')+'"><b>'+p.StockKg+'</b></td>'+
         '<td class="num">'+nf(Math.round(Number(p.StockKg)*(Number(p.SqftPerKg)||50)))+'</td>'+
-        '<td class="num">'+p.ReorderKg+'</td>'+
-        '<td>'+moveBtns('powder',p.PowderID)+'</td></tr>'; }).join('')+'</tbody>';
-
-  $('challanTable').innerHTML =
-    '<thead><tr><th>No.</th><th>Date</th><th>Customer</th><th>Particulars</th>'+
-    '<th class="num">Qty</th><th>Vehicle</th></tr></thead><tbody>'+
-    (d.challans||[]).map(function(c){
-      return '<tr><td class="mono"><b>'+esc(c.ChallanNo)+'</b></td><td class="num">'+dmy(c.Date)+'</td>'+
-        '<td>'+esc(c.Customer)+'</td><td>'+esc(c.Particulars)+'</td>'+
-        '<td class="num">'+c.Qty+'</td><td>'+esc(c.Vehicle)+'</td></tr>'; }).join('')+'</tbody>';
-
+        '<td class="num">'+p.ReorderKg+'</td><td>'+mv('powder',p.PowderID)+'</td></tr>';}).join('')+'</tbody>';
+  $('movesTable').innerHTML='<thead><tr><th>When</th><th>Item</th><th class="num">Qty</th>'+
+    '<th>Work centre</th><th>Project</th><th>By</th></tr></thead><tbody>'+
+    (d.stockMoves||[]).slice(0,25).map(function(m){
+      return '<tr><td class="num">'+dmy(m.Date)+'</td><td>'+esc(m.ItemID)+'</td>'+
+        '<td class="num">'+(m.Dir==='IN'?'+':'−')+m.Qty+'</td><td>'+esc(m.WorkCentre||'—')+'</td>'+
+        '<td>'+esc(m.ProjectID||'—')+'</td><td>'+esc(m.By)+'</td></tr>';}).join('')+'</tbody>';
+  $('challanTable').innerHTML='<thead><tr><th>No.</th><th>Date</th><th>Customer</th>'+
+    '<th>Particulars</th><th class="num">Qty</th><th>Vehicle</th></tr></thead><tbody>'+
+    (d.challans||[]).map(function(c){return '<tr><td class="mono"><b>'+esc(c.ChallanNo)+'</b></td>'+
+      '<td class="num">'+dmy(c.Date)+'</td><td>'+esc(c.Customer)+'</td><td>'+esc(c.Particulars)+'</td>'+
+      '<td class="num">'+c.Qty+'</td><td>'+esc(c.Vehicle)+'</td></tr>';}).join('')+'</tbody>';
   Array.prototype.forEach.call(document.querySelectorAll('[data-move]'),function(b){
-    b.addEventListener('click',function(){ moveDialog(b.dataset.move,b.dataset.id,b.dataset.dir); });
-  });
-  function moveBtns(kind,id){
-    return '<button class="linkbtn" data-move="'+kind+'" data-id="'+esc(id)+'" data-dir="IN">+ In</button>'+
-           '<button class="linkbtn" data-move="'+kind+'" data-id="'+esc(id)+'" data-dir="OUT">− Out</button>';
-  }
+    b.addEventListener('click',function(){moveDialog(b.dataset.move,b.dataset.id,b.dataset.dir);});});
+  function mv(k,id){return '<button class="linkbtn" data-move="'+k+'" data-id="'+esc(id)+'" data-dir="IN">+ In</button>'+
+    '<button class="linkbtn" data-move="'+k+'" data-id="'+esc(id)+'" data-dir="OUT">− Out</button>';}
 }
 function moveDialog(kind,id,dir){
-  var b=$('sheetBody'); b.innerHTML='';
+  var b=$('sheetBody');b.innerHTML='';
   b.appendChild(el('div','lbl',(dir==='IN'?'Receive into':'Issue from')+' stores'));
-  b.appendChild(el('div','jname',id));
-  b.appendChild(el('label',null, kind==='powder' ? 'Kilograms' : 'Quantity'));
-  var q=el('input'); q.type='number'; q.min='0'; q.step='any'; b.appendChild(q);
-  b.appendChild(el('label',null,'For which project (optional)'));
-  var ps=el('select'); ps.appendChild(el('option',null,'—'));
-  S.data.projects.forEach(function(p){ var o=el('option',null,p.Name); o.value=p.ProjectID; ps.appendChild(o); });
-  b.appendChild(ps);
-  b.appendChild(el('label',null,'Note (optional)'));
-  var nt=el('input'); b.appendChild(nt);
-  var go=el('button','bigbtn b-done'); go.textContent=(dir==='IN'?'Receive':'Issue');
+  b.appendChild(el('div','top',id));
+  lab(b,kind==='powder'?'Kilograms':'Quantity');var q=inp(b,'number');q.step='any';
+  lab(b,'Which work centre is taking it');
+  var wc=el('select');opt(wc,'','—');
+  (S.data.workCentres||[]).forEach(function(w){opt(wc,w.Name,w.Name,w.Name===S.me.workCentre);});
+  b.appendChild(wc);
+  lab(b,'For which task');
+  var ts=el('select');opt(ts,'','— none —');
+  (S.data.tasks||[]).filter(function(t){return ['ready','running'].indexOf(String(t.Status))>=0;})
+    .forEach(function(t){opt(ts,t.TaskID,t.ProjectName+' — '+t.Operation);});
+  b.appendChild(ts);
+  lab(b,'Note (optional)');var nt=inp(b,'text');
+  var go=el('button','bigbtn b-done');go.textContent=(dir==='IN'?'Receive':'Issue');
   go.addEventListener('click',function(){
+    var task=(S.data.tasks||[]).filter(function(t){return t.TaskID===ts.value;})[0];
     var body=(kind==='powder')
-      ? {powderID:id,kg:Number(q.value)||0,dir:dir,projectID:ps.value,note:nt.value}
-      : {itemID:id,qty:Number(q.value)||0,dir:dir,projectID:ps.value,note:nt.value};
+      ?{powderID:id,kg:Number(q.value)||0,dir:dir,workCentre:wc.value,taskID:ts.value,
+        projectID:task?task.ProjectID:'',note:nt.value}
+      :{itemID:id,qty:Number(q.value)||0,dir:dir,workCentre:wc.value,taskID:ts.value,
+        projectID:task?task.ProjectID:'',note:nt.value};
     closeSheet();
-    api(kind==='powder'?'powderMove':'stockMove',body).then(function(r){
-      toast(r.low?'Recorded — BELOW REORDER LEVEL':'Recorded');
-      refresh();
-    }).catch(function(e){ toast(e.message,true); });
-  });
-  b.appendChild(go);
-  $('sheet').classList.remove('hidden');
+    api(kind==='powder'?'powderMove':'stockMove',body)
+      .then(function(r){toast(r.low?'Recorded — BELOW REORDER LEVEL':'Recorded');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
 }
-$('newChallan').addEventListener('click',function(){
-  var b=$('sheetBody'); b.innerHTML='';
-  b.appendChild(el('div','lbl','New delivery challan'));
-  b.appendChild(el('label',null,'Project'));
-  var ps=el('select'); S.data.projects.forEach(function(p){
-    var o=el('option',null,p.Name); o.value=p.ProjectID; ps.appendChild(o); });
-  b.appendChild(ps);
-  b.appendChild(el('label',null,'Particulars'));
-  var pa=el('input'); pa.placeholder='e.g. Folding Door 3sh x 4'; b.appendChild(pa);
-  b.appendChild(el('label',null,'Quantity')); var qy=el('input'); qy.type='number'; b.appendChild(qy);
-  b.appendChild(el('label',null,'Vehicle number')); var vh=el('input'); b.appendChild(vh);
-  b.appendChild(el('label',null,'Driver')); var dv=el('input'); b.appendChild(dv);
-  var go=el('button','bigbtn b-done'); go.textContent='Create challan';
+$('addStock').addEventListener('click',function(){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','New stock item'));
+  lab(b,'Type');var ty=el('select');
+  ['GI Sheet','MS Sheet','SS Sheet','Precoated Sheet','GI Coil','Precoated Coil','Aluminium','UPVC Profile','Hardware']
+    .forEach(function(x){opt(ty,x);});b.appendChild(ty);
+  lab(b,'Thickness mm');var th=inp(b,'number');th.step='any';
+  lab(b,'Width mm');var wd=inp(b,'number');
+  lab(b,'Length mm');var ln=inp(b,'number');
+  lab(b,'Grade / finish');var gr=inp(b,'text');
+  lab(b,'Opening quantity');var qt=inp(b,'number');
+  lab(b,'Unit');var un=el('select');['sheets','kg','coils','nos','metres'].forEach(function(x){opt(un,x);});b.appendChild(un);
+  lab(b,'Reorder level');var rl=inp(b,'number');
+  lab(b,'Supplier lead time (days)');var ld=inp(b,'number');
+  lab(b,'Rate per kg');var rt=inp(b,'number');
+  var go=el('button','bigbtn b-done');go.textContent='Add item';
+  go.addEventListener('click',function(){
+    var id=(String(ty.value).indexOf('Coil')>=0?'C-':'S-')+(th.value||0)+'-'+(wd.value||0)+'-'+(ln.value||0)+
+      (gr.value?'-'+gr.value.replace(/\s+/g,'').slice(0,6).toUpperCase():'');
+    closeSheet();
+    api('saveStock',{row:{ItemID:id,Type:ty.value,Thickness:Number(th.value)||0,
+      Width:Number(wd.value)||0,Length:Number(ln.value)||0,Grade:gr.value,
+      Qty:Number(qt.value)||0,Unit:un.value,ReorderLevel:Number(rl.value)||0,
+      LeadDays:Number(ld.value)||0,RatePerKg:Number(rt.value)||0,Active:'yes',Updated:new Date()}})
+      .then(function(){toast('Item added');refresh();}).catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+});
+$('addPowder').addEventListener('click',function(){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','New powder shade'));
+  lab(b,'Make');var mk=inp(b,'text','Rapid Coat / Libra / Beger');
+  lab(b,'Shade');var sh=inp(b,'text','RAL 7006');
+  lab(b,'Finish');var fi=el('select');['Matt','Glossy','Semi Gloss','Structure','Satin','Textured']
+    .forEach(function(x){opt(fi,x);});b.appendChild(fi);
+  lab(b,'Opening kg');var kg=inp(b,'number');kg.step='any';
+  lab(b,'Reorder kg');var rk=inp(b,'number');
+  lab(b,'Rate per kg');var rt=inp(b,'number');
+  lab(b,'Coverage sqft per kg');var cv=inp(b,'number');cv.value='50';
+  var go=el('button','bigbtn b-done');go.textContent='Add shade';
   go.addEventListener('click',function(){
     closeSheet();
+    api('savePowder',{row:{PowderID:'PW-'+String(sh.value).replace(/\W/g,'').toUpperCase().slice(0,8),
+      Make:mk.value,Shade:sh.value,Finish:fi.value,StockKg:Number(kg.value)||0,
+      ReorderKg:Number(rk.value)||0,RatePerKg:Number(rt.value)||0,
+      SqftPerKg:Number(cv.value)||50,Active:'yes',Updated:new Date()}})
+      .then(function(){toast('Shade added');refresh();}).catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+});
+$('newChallan').addEventListener('click',function(){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','New delivery challan'));
+  lab(b,'Project');var ps=el('select');
+  (S.data.projects||[]).forEach(function(p){opt(ps,p.ProjectID,p.Name);});b.appendChild(ps);
+  lab(b,'Particulars');var pa=inp(b,'text','e.g. Folding Door 3sh x 4');
+  lab(b,'Quantity');var qy=inp(b,'number');
+  lab(b,'Vehicle number');var vh=inp(b,'text');
+  lab(b,'Driver');var dv=inp(b,'text');
+  var go=el('button','bigbtn b-done');go.textContent='Create challan';
+  go.addEventListener('click',function(){closeSheet();
     api('challan',{projectID:ps.value,particulars:pa.value,qty:Number(qy.value)||0,
       vehicle:vh.value,driver:dv.value,markDispatched:true})
-      .then(function(r){ toast('Challan '+r.challanNo+' created'); refresh(); })
-      .catch(function(e){ toast(e.message,true); });
-  });
-  b.appendChild(go);
-  $('sheet').classList.remove('hidden');
+      .then(function(r){toast('Challan '+r.challanNo+' created');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
 });
 
-/* ---------------- scoreboard ---------------- */
+/* ---------- SCORES ---------- */
 function renderScores(){
-  var d=S.data; if(!d) return;
+  var d=S.data;if(!d)return;
   var live=String(d.config.scoring_live||'no').toLowerCase()==='yes';
-  $('scoreSub').textContent = live
-    ? 'Output 50% · Quality 30% · Reliability 20%. Plant-fault downtime is removed from the denominator.'
-    : 'Scoring is in MEASURE-ONLY mode. Numbers are being collected but nobody is being judged on them yet.';
+  $('scoreSub').textContent=live?'Output 50% · Quality 30% · Reliability 20%. Plant-fault downtime is removed.'
+    :'MEASURE-ONLY mode. Numbers are being collected but nobody is judged on them yet.';
   var rows=(d.scores||[]).slice().sort(function(a,b){return Number(b.Score)-Number(a.Score);});
-  var body = rows.length ? rows.map(function(r,i){
-      var sc=Number(r.Score)||0;
-      var col=sc>=90?'var(--ok)':sc>=70?'var(--warn)':'var(--late)';
+  if(isOp()) rows=rows.filter(function(r){return r.Operator===S.me.name;});
+  $('scoreCard').innerHTML='<h2>Today</h2><div class="tblwrap"><table class="d"><thead><tr>'+
+    '<th>#</th><th>Operator</th><th class="num">Output</th><th class="num">Quality</th>'+
+    '<th class="num">Reliability</th><th class="num">Min earned</th>'+
+    '<th class="num">Not their fault</th><th>Score</th></tr></thead><tbody>'+
+    (rows.length?rows.map(function(r,i){var sc=Number(r.Score)||0;
+      var c=sc>=90?'var(--ok)':sc>=70?'var(--warn)':'var(--late)';
       return '<tr><td class="mono">'+(i+1)+'</td><td><b>'+esc(r.Operator)+'</b></td>'+
         '<td class="num">'+r.OutputPct+'%</td><td class="num">'+r.QualityPct+'%</td>'+
-        '<td class="num">'+r.ReliabilityPct+'%</td>'+
-        '<td class="num">'+nf(r.EarnedMin)+'</td>'+
-        '<td class="num">'+r.PlantDownMin+'</td>'+
-        '<td><span class="scorebar"><i style="width:'+Math.min(sc,100)+'%;background:'+col+'"></i></span> '+
-        '<b class="mono">'+sc+'</b></td></tr>';
-    }).join('')
-    : '<tr><td colspan="8" style="text-align:center;color:var(--dim);padding:18px">No scores yet. Run it from the Setup tab or wait for the nightly job.</td></tr>';
-  $('scoreCard').innerHTML =
-    '<h2>Today</h2><div class="tblwrap"><table class="d"><thead><tr><th>#</th><th>Operator</th>'+
-    '<th class="num">Output</th><th class="num">Quality</th><th class="num">Reliability</th>'+
-    '<th class="num">Min earned</th><th class="num">Not their fault</th><th>Score</th>'+
-    '</tr></thead><tbody>'+body+'</tbody></table></div>'+
-    (live?'':'<p class="note" style="margin-top:10px">Set <b>scoring_live</b> to <b>yes</b> in the Config sheet when you are ready. Recommended: after 90 days.</p>');
-
-  $('learnTable').innerHTML =
-    '<thead><tr><th>Item</th><th>Operation</th><th class="num">Runs</th>'+
+        '<td class="num">'+r.ReliabilityPct+'%</td><td class="num">'+nf(r.EarnedMin)+'</td>'+
+        '<td class="num">'+r.PlantDownMin+'</td><td><span class="scorebar">'+
+        '<i style="width:'+Math.min(sc,100)+'%;background:'+c+'"></i></span> <b class="mono">'+sc+'</b></td></tr>';}).join('')
+      :'<tr><td colspan="8" style="text-align:center;color:var(--dim);padding:18px">No scores yet today.</td></tr>')+
+    '</tbody></table></div>';
+  $('learnTable').innerHTML='<thead><tr><th>Item</th><th>Operation</th><th class="num">Runs</th>'+
     '<th class="num">Was</th><th class="num">Now</th><th class="num">Change</th></tr></thead><tbody>'+
-    ((d.learn||[]).length ? d.learn.map(function(l){
-      return '<tr><td>'+esc(l.Family)+'</td><td>'+esc(l.Operation)+'</td>'+
-        '<td class="num">'+l.Samples+'</td><td class="num">'+l.OldPlanMin+'</td>'+
-        '<td class="num"><b>'+l.NewPlanMin+'</b></td>'+
+    ((d.learn||[]).length?d.learn.map(function(l){
+      return '<tr><td>'+esc(l.Family)+'</td><td>'+esc(l.Operation)+'</td><td class="num">'+l.Samples+'</td>'+
+        '<td class="num">'+l.OldPlanMin+'</td><td class="num"><b>'+l.NewPlanMin+'</b></td>'+
         '<td class="num" style="color:'+(Number(l.ChangePct)>0?'var(--late)':'var(--ok)')+'">'+
-        (Number(l.ChangePct)>0?'+':'')+l.ChangePct+'%</td></tr>'; }).join('')
-      : '<tr><td colspan="6" style="text-align:center;color:var(--dim);padding:18px">Nothing learned yet. Needs 20 clean runs of an operation.</td></tr>')+
-    '</tbody>';
+        (Number(l.ChangePct)>0?'+':'')+l.ChangePct+'%</td></tr>';}).join('')
+      :'<tr><td colspan="6" style="text-align:center;color:var(--dim);padding:18px">Nothing learned yet — needs 20 clean runs.</td></tr>')+'</tbody>';
 }
 $('runLearn').addEventListener('click',function(){
-  api('runLearning',{}).then(function(r){
-    toast((r.rows&&r.rows.length?r.rows.length:0)+' times updated'); refresh();
-  }).catch(function(e){ toast(e.message,true); });
+  api('runLearning',{}).then(function(r){toast(((r.rows||[]).length)+' times updated');refresh();})
+    .catch(function(e){toast(e.message,true);});});
+
+/* ---------- ADMIN ---------- */
+function renderAdmin(){
+  var d=S.data;if(!d||['director','planner'].indexOf(S.me.role)<0)return;
+  var pool=d.load.pool,h='<h2>Quota floors</h2><div class="tblwrap"><table class="d"><thead><tr>'+
+    '<th>Director</th><th class="num">Floor %</th><th class="num">Floor min</th>'+
+    '<th class="num">Demand</th><th class="num">Released</th></tr></thead><tbody>';
+  Object.keys(pool).forEach(function(k){
+    h+='<tr><td><span class="dot" style="background:'+(DIRCOL[k]||'')+'"></span>'+k+'</td>'+
+      '<td class="num">'+Math.round(Number(d.config['quota_'+k]||0)*100)+'%</td>'+
+      '<td class="num">'+nf(pool[k].floor)+'</td><td class="num">'+nf(pool[k].demand)+'</td>'+
+      '<td class="num" style="color:var(--ashutosh)">'+nf(pool[k].unused)+'</td></tr>';});
+  $('quotaCard').innerHTML=h+'</tbody></table></div>';
+
+  $('wcTable').innerHTML='<thead><tr><th>Work centre</th><th>Group</th><th class="num">Qty</th>'+
+    '<th class="num">Hrs/day</th><th class="num">Avail</th><th class="num">Shifts</th></tr></thead><tbody>'+
+    (d.workCentres||[]).map(function(w){return '<tr><td><b>'+esc(w.Name)+'</b></td><td>'+esc(w.Grp)+'</td>'+
+      '<td class="num">'+w.Qty+'</td><td class="num">'+w.HrsDay+'</td>'+
+      '<td class="num">'+Math.round(Number(w.Avail)*100)+'%</td><td class="num">'+w.Shifts+'</td></tr>';}).join('')+'</tbody>';
+  $('itemTable').innerHTML='<thead><tr><th>Item</th><th>Division</th><th>Unit</th></tr></thead><tbody>'+
+    (d.items||[]).map(function(i){return '<tr><td><b>'+esc(i.Family)+'</b></td><td>'+esc(i.Division)+
+      '</td><td>'+esc(i.Unit)+'</td></tr>';}).join('')+'</tbody>';
+  $('stdTable').innerHTML='<thead><tr><th>Item</th><th>Operation</th><th>Group</th>'+
+    '<th class="num">Setup</th><th class="num">Target</th><th class="num">Plan</th><th class="num">Runs</th></tr></thead><tbody>'+
+    (d.std||[]).map(function(t){var tg=Number(t.TargetMin)||0,pl=Number(t.PlanMin)||tg;
+      var df=tg?Math.round((pl/tg-1)*100):0;
+      return '<tr><td>'+esc(t.Family)+'</td><td>'+esc(t.Operation)+'</td><td>'+esc(t.Grp)+'</td>'+
+        '<td class="num">'+t.SetupMin+'</td><td class="num"><b>'+tg+'</b></td>'+
+        '<td class="num">'+pl+(df?' <span class="lbl" style="color:'+(df>0?'var(--late)':'var(--ok)')+'">'+
+        (df>0?'+':'')+df+'%</span>':'')+'</td><td class="num">'+(t.Samples||0)+'</td></tr>';}).join('')+'</tbody>';
+}
+
+/* ---- add dialogs ---- */
+$('addProject').addEventListener('click',function(){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','New project'));
+  b.appendChild(el('p','note','All the tasks for this division are created automatically from the routing.'));
+  lab(b,'Project name');var nm=inp(b,'text');
+  lab(b,'Division');var dv=el('select');
+  var divs=(S.data.routings||[]).map(function(r){return r.Division;})
+    .filter(function(v,i,a){return a.indexOf(v)===i;});
+  divs.forEach(function(x){opt(dv,x);});b.appendChild(dv);
+  lab(b,'Director');var dr=el('select');['Rupali','Ashutosh','Mohit'].forEach(function(x){opt(dr,x);});b.appendChild(dr);
+  lab(b,'Customer');var cu=inp(b,'text');
+  lab(b,'Site address');var ad=inp(b,'text');
+  lab(b,'Size class');var sz=el('select');
+  [['S','S — one item'],['M','M — a few items'],['L','L — a batch'],['XL','XL — full project']]
+    .forEach(function(x){opt(sz,x[0],x[1]);});b.appendChild(sz);
+  lab(b,'Quantity');var qt=inp(b,'number');
+  lab(b,'Unit');var un=el('select');['Door','Window','Piece','Baffles','Pod','Batch','Sqft']
+    .forEach(function(x){opt(un,x);});b.appendChild(un);
+  lab(b,'Promised date');var pd=inp(b,'date');
+  var go=el('button','bigbtn b-done');go.textContent='Create project + tasks';
+  go.addEventListener('click',function(){
+    if(!nm.value){toast('Name is required',true);return;}
+    closeSheet();
+    api('newProject',{row:{Name:nm.value,Division:dv.value,Director:dr.value,Customer:cu.value,
+      Address:ad.value,Size:sz.value,Qty:Number(qt.value)||0,Unit:un.value,PromisedDate:pd.value}})
+      .then(function(r){toast(r.tasks+' tasks created');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+});
+function simpleAdd(title,fields,action,build){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl',title));
+  var refs={};
+  fields.forEach(function(f){
+    lab(b,f.label);
+    if(f.options){var s=el('select');f.options().forEach(function(o){opt(s,o);});b.appendChild(s);refs[f.key]=s;}
+    else{var i=inp(b,f.type||'text',f.ph);if(f.value)i.value=f.value;refs[f.key]=i;}
+  });
+  var go=el('button','bigbtn b-done');go.textContent='Save';
+  go.addEventListener('click',function(){closeSheet();
+    api(action,{row:build(refs)}).then(function(){toast('Saved');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+}
+$('addWC').addEventListener('click',function(){
+  simpleAdd('New work centre',[
+    {key:'Name',label:'Name',ph:'e.g. CNC Pressbrake 3'},
+    {key:'Grp',label:'Group',options:function(){return ['Laser','Brake','CTL','Welding','Grinding',
+      'Powder','Hardware','Packing','Design','Site'];}},
+    {key:'Qty',label:'How many machines',type:'number',value:'1'},
+    {key:'HrsDay',label:'Hours per day',type:'number',value:'8'},
+    {key:'Avail',label:'Availability (0.75 = 75%)',type:'number',value:'0.75'},
+    {key:'Shifts',label:'Shifts',type:'number',value:'1'}
+  ],'saveWorkCentre',function(r){return {Name:r.Name.value,Grp:r.Grp.value,
+    Qty:Number(r.Qty.value)||1,HrsDay:Number(r.HrsDay.value)||8,
+    Avail:Number(r.Avail.value)||0.75,Shifts:Number(r.Shifts.value)||1,Active:'yes'};});
+});
+$('addItem').addEventListener('click',function(){
+  simpleAdd('New item',[
+    {key:'Family',label:'Item name',ph:'e.g. Z Louver 132mm'},
+    {key:'Division',label:'Division',options:function(){return (S.data.routings||[])
+      .map(function(r){return r.Division;}).filter(function(v,i,a){return a.indexOf(v)===i;});}},
+    {key:'Unit',label:'Sold / counted in',options:function(){return ['Piece','Sqft','Sqm','Metre','Set','Pod','Batch','Kg'];}}
+  ],'saveItem',function(r){return {Family:r.Family.value,Division:r.Division.value,
+    Unit:r.Unit.value,Active:'yes'};});
+});
+$('addOp').addEventListener('click',function(){
+  simpleAdd('New operation',[
+    {key:'Operation',label:'Operation name',ph:'e.g. Deburring'},
+    {key:'Grp',label:'Work centre group',options:function(){return ['Laser','Brake','CTL','Welding',
+      'Grinding','Powder','Hardware','Packing','Design','Site'];}}
+  ],'saveOperation',function(r){return {Operation:r.Operation.value,Grp:r.Grp.value};});
+});
+$('addStd').addEventListener('click',function(){
+  simpleAdd('New standard time',[
+    {key:'Family',label:'Item',options:function(){return (S.data.items||[]).map(function(i){return i.Family;});}},
+    {key:'Operation',label:'Operation',options:function(){return (S.data.operations||[]).map(function(o){return o.Operation;});}},
+    {key:'Grp',label:'Group',options:function(){return ['Laser','Brake','CTL','Welding','Grinding',
+      'Powder','Hardware','Packing','Design','Site'];}},
+    {key:'SetupMin',label:'Setup minutes per batch',type:'number',value:'0'},
+    {key:'TargetMin',label:'Target minutes per unit',type:'number'}
+  ],'saveStdTime',function(r){var t=Number(r.TargetMin.value)||0;
+    return {Family:r.Family.value,Operation:r.Operation.value,Grp:r.Grp.value,
+      SetupMin:Number(r.SetupMin.value)||0,TargetMin:t,PlanMin:t,Samples:0};});
+});
+$('addUser').addEventListener('click',function(){
+  simpleAdd('New person',[
+    {key:'Username',label:'Username (lower case, no spaces)'},
+    {key:'Password',label:'Password'},
+    {key:'Name',label:'Full name'},
+    {key:'Role',label:'Role',options:function(){return ['operator','supervisor','stores','planner','office','accounts','director'];}},
+    {key:'WorkCentre',label:'Work centre group',options:function(){return ['','Laser','Brake','CTL',
+      'Welding','Grinding','Powder','Hardware','Packing','Design','Site'];}},
+    {key:'Lang',label:'Language',options:function(){return ['mr','en'];}}
+  ],'saveUser',function(r){return {Username:r.Username.value.toLowerCase(),Password:r.Password.value,
+    Name:r.Name.value,Role:r.Role.value,WorkCentre:r.WorkCentre.value,Lang:r.Lang.value,Active:'yes'};});
 });
 
-/* ---------------- go ---------------- */
-try{ S.queue = JSON.parse(store.get('hitek_q')||'[]'); }catch(e){ S.queue=[]; }
+/* ---------- go ---------- */
+try{S.queue=JSON.parse(store.get('q')||'[]');}catch(e){S.queue=[];}
 renderSync();
-S.token = store.get('hitek_t');
-try{ S.me = JSON.parse(store.get('hitek_u')||'null'); }catch(e){ S.me=null; }
-if(S.token && S.me) start(); else showLogin();
-
-window.addEventListener('online', function(){ flushQueue().then(refresh); });
-setInterval(function(){ if(S.token && !document.hidden) refresh(); }, 120000);
+S.token=store.get('t');
+try{S.me=JSON.parse(store.get('me')||'null');}catch(e){S.me=null;}
+if(S.token&&S.me)start();else showLogin();
+window.addEventListener('online',function(){flushQueue().then(refresh);});
+setInterval(function(){if(S.token&&!document.hidden)refresh();},120000);
 })();

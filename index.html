@@ -13,8 +13,7 @@
 
 <section id="login" class="hidden">
   <form id="loginForm" class="loginbox">
-    <div class="logo">HI TEK</div>
-    <div class="logosub">Production Control</div>
+    <div class="logo">HI TEK</div><div class="logosub">Production Control</div>
     <div id="loginMsg" class="msg"></div>
     <label for="u">Username</label>
     <input id="u" autocomplete="username" autocapitalize="off" required>
@@ -33,6 +32,12 @@
   </nav>
 
   <div id="syncbar" class="syncbar hidden"><span id="syncmsg"></span></div>
+
+  <!-- WORK CENTRE stop bar: the whole station, never one project -->
+  <div id="stationbar" class="stationbar">
+    <div class="stnleft"><span class="lbl">Work centre</span><b id="stnName">—</b></div>
+    <button id="stopBtn" class="btn stopwc dev">मशीन बंद <em>Machine stopped</em></button>
+  </div>
   <div id="stopbar" class="stopbar hidden">
     <div class="stoptxt"><b class="dev" id="stopReason"></b><span id="stopTimer" class="mono">0 min</span></div>
     <button id="resumeBtn" class="btn resume dev">पुन्हा सुरू <em>Resume</em></button>
@@ -43,26 +48,50 @@
     <section class="view" id="v-work">
       <div class="vhead"><h1 id="workTitle">My work</h1><p id="workSub"></p></div>
       <div id="workQueue" class="queue"></div>
+      <button id="otherWork" class="btn ghost" style="margin-top:16px">Other work I did today</button>
+      <input type="file" id="filePick" accept="image/*,application/pdf" class="hidden">
+    </section>
+
+    <section class="view" id="v-docs">
+      <div class="vhead"><h1>Documents</h1>
+        <p>BOQs, measurement sheets, drawings, job cards and photos. Filed against the project so the plant stops printing.</p></div>
+      <div class="card">
+        <button id="uploadBtn" class="btn primary" style="margin:0">Upload a file</button>
+        <span class="note" style="margin-left:12px">Photos are compressed on the phone before upload.</span>
+      </div>
+      <div class="card"><label for="docFilter">Project</label><select id="docFilter"></select></div>
+      <div id="docGrid" class="docgrid"></div>
+    </section>
+
+    <section class="view" id="v-tracker">
+      <div class="vhead"><h1>Order tracker</h1>
+        <p>Every project and exactly which work centre each one is sitting at right now.</p></div>
+      <div class="card"><label for="trackFilter">Show</label>
+        <select id="trackFilter"></select></div>
+      <div id="trackList"></div>
     </section>
 
     <section class="view" id="v-board">
-      <div class="vhead"><h1>Sequence</h1><p>Every live project, ordered by Critical Ratio.</p></div>
+      <div class="vhead"><h1>Sequence</h1><p>Ordered by Critical Ratio. Run top to bottom.</p></div>
       <div class="card" id="loadCard"></div>
       <div class="card"><div class="tblwrap"><table id="boardTable" class="d"></table></div></div>
     </section>
 
     <section class="view" id="v-report">
-      <div class="vhead"><h1>Screenshots</h1>
-        <p>Long-press or right-click a card to save the image for the WhatsApp group.</p></div>
+      <div class="vhead"><h1>Screenshots</h1><p>Long-press or right-click to save for WhatsApp.</p></div>
       <div class="shots"><div class="shot" id="shotDay"></div><div class="shot" id="shotProd"></div></div>
     </section>
 
     <section class="view" id="v-stock">
-      <div class="vhead"><h1>Stores</h1><p>Sheet, coil, powder and dispatch challans.</p></div>
+      <div class="vhead"><h1>Stores</h1><p>Issue against a work centre and a task, so consumption is traceable.</p></div>
       <div class="card"><h2>Sheet &amp; coil</h2>
-        <div class="tblwrap"><table id="stockTable" class="d"></table></div></div>
+        <button id="addStock" class="btn ghost">Add new item</button>
+        <div class="tblwrap" style="margin-top:12px"><table id="stockTable" class="d"></table></div></div>
       <div class="card"><h2>Powder</h2>
-        <div class="tblwrap"><table id="powderTable" class="d"></table></div></div>
+        <button id="addPowder" class="btn ghost">Add new shade</button>
+        <div class="tblwrap" style="margin-top:12px"><table id="powderTable" class="d"></table></div></div>
+      <div class="card"><h2>Recent issues — who took what, where</h2>
+        <div class="tblwrap"><table id="movesTable" class="d"></table></div></div>
       <div class="card"><h2>Delivery challans</h2>
         <button id="newChallan" class="btn ghost">New challan</button>
         <div class="tblwrap" style="margin-top:12px"><table id="challanTable" class="d"></table></div></div>
@@ -72,19 +101,29 @@
       <div class="vhead"><h1>Scoreboard</h1><p id="scoreSub"></p></div>
       <div class="card" id="scoreCard"></div>
       <div class="card"><h2>What the system has learned</h2>
-        <p class="note">Planning times update from a rolling median of real runs. Target times, which
-        people are scored on, never move by themselves.</p>
-        <div class="tblwrap" style="margin-top:10px"><table id="learnTable" class="d"></table></div>
+        <div class="tblwrap"><table id="learnTable" class="d"></table></div>
         <button id="runLearn" class="btn ghost" style="margin-top:12px">Run learning now</button></div>
     </section>
 
     <section class="view" id="v-admin">
-      <div class="vhead"><h1>Setup</h1><p>Quota floors, projects and standard times.</p></div>
+      <div class="vhead"><h1>Setup</h1><p>Add projects, work centres, items and operations.</p></div>
+      <div class="card">
+        <h2>Add</h2>
+        <div class="addrow">
+          <button id="addProject" class="btn primary" style="margin:0">+ New project</button>
+          <button id="addWC" class="btn ghost">+ Work centre</button>
+          <button id="addItem" class="btn ghost">+ Item</button>
+          <button id="addOp" class="btn ghost">+ Operation</button>
+          <button id="addStd" class="btn ghost">+ Standard time</button>
+          <button id="addUser" class="btn ghost">+ Person</button>
+        </div>
+      </div>
       <div class="card" id="quotaCard"></div>
-      <div class="card"><h2>Projects</h2><div class="tblwrap"><table id="projTable" class="d"></table></div></div>
+      <div class="card"><h2>Work centres</h2><div class="tblwrap"><table id="wcTable" class="d"></table></div></div>
+      <div class="card"><h2>Items</h2><div class="tblwrap"><table id="itemTable" class="d"></table></div></div>
       <div class="card"><h2>Standard times</h2>
-        <p class="note"><b>Target</b> is what people are scored on — you set it.
-        <b>Plan</b> is what the scheduler uses — the system learns it.</p>
+        <p class="note"><b>Target</b> = what people are scored on, you set it.
+           <b>Plan</b> = what the scheduler uses, the system learns it.</p>
         <div class="tblwrap" style="margin-top:10px"><table id="stdTable" class="d"></table></div></div>
     </section>
 
@@ -92,12 +131,9 @@
 </div>
 
 <div id="sheet" class="sheetwrap hidden">
-  <div class="sheetbox">
-    <button class="sheetclose" id="sheetClose" aria-label="Close">&times;</button>
-    <div id="sheetBody"></div>
-  </div>
+  <div class="sheetbox"><button class="sheetclose" id="sheetClose">&times;</button>
+    <div id="sheetBody"></div></div>
 </div>
-
 <div id="toast" class="toast"></div>
 <script src="app.js"></script>
 </body>
