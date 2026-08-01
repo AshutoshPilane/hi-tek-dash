@@ -5,7 +5,8 @@
 (function(){
 'use strict';
 var API='/api';
-var S={token:null,me:null,data:null,queue:[],tab:null,sel:null};
+var S={token:null,me:null,data:null,queue:[],tab:null,sel:null,
+       station:null,stationToken:null,crew:{op:null,helpers:[]}};
 
 var store=(function(){
   try{var k='__t';localStorage.setItem(k,'1');localStorage.removeItem(k);
@@ -30,13 +31,37 @@ function lab(b,t){b.appendChild(el('label',null,t));}
 function inp(b,type,ph){var i=el('input');i.type=type||'text';if(ph)i.placeholder=ph;b.appendChild(i);return i;}
 
 /* ---------- API + offline ---------- */
-function api(a,body){
+/* Apps Script queues concurrent requests. A queued call must retry quietly,
+   not surface as "the portal is locked". Three tries, 1s / 2s / 4s.          */
+function api(a,body,tries){
+  tries=tries||0;
   return fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
     body:JSON.stringify(Object.assign({action:a,token:S.token},body||{}))})
-  .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-  .then(function(j){if(j.status!=='success'){if(j.code==='AUTH')logout(true);
-    throw new Error(j.message||'Request failed');}return j.data;});
+  .then(function(r){
+    if(r.status===429||r.status===503||r.status>=500){
+      if(tries<3) return wait(Math.pow(2,tries)*1000).then(function(){return api(a,body,tries+1);});
+      throw new Error('Server is busy. Please try again in a minute.');
+    }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  })
+  .then(function(j){
+    if(j&&j.status!=='success'){
+      if(j.code==='AUTH'){ logout(true); throw new Error(j.message||'Session expired'); }
+      if(/busy/i.test(j.message||'') && tries<3)
+        return wait(Math.pow(2,tries)*1000).then(function(){return api(a,body,tries+1);});
+      throw new Error(j.message||'Request failed');
+    }
+    return j.data;
+  })
+  .catch(function(e){
+    /* a dropped connection is not a failed action — retry before giving up */
+    if(/Failed to fetch|NetworkError|Load failed/i.test(e.message||'') && tries<3)
+      return wait(Math.pow(2,tries)*1000).then(function(){return api(a,body,tries+1);});
+    throw e;
+  });
 }
+function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
 function queueWrite(a,b){S.queue.push({action:a,body:b});store.set('q',JSON.stringify(S.queue));renderSync();}
 function flushQueue(){
   if(!S.queue.length||!S.token)return Promise.resolve();
@@ -78,7 +103,9 @@ $('loginForm').addEventListener('submit',function(e){
     body:JSON.stringify({action:'LOGIN',username:$('u').value.trim(),password:$('p').value})})
   .then(function(r){return r.json();})
   .then(function(j){if(j.status!=='success')throw new Error(j.message||'Login failed');
-    S.token=j.data.token;S.me=j.data.user;store.set('t',S.token);store.set('me',JSON.stringify(S.me));start();})
+    S.token=j.data.token;S.me=j.data.user;
+    store.set('t',S.token);store.set('me',JSON.stringify(S.me));
+    store.set('who',S.me.username||'');start();})
   .catch(function(e){var x=$('loginMsg');x.textContent=e.message;x.className='msg show';})
   .then(function(){b.disabled=false;b.textContent='Log in';});
 });
@@ -90,8 +117,10 @@ $('logout').addEventListener('click',function(){logout(false);});
 function start(){
   $('login').classList.add('hidden');$('app').classList.remove('hidden');
   $('whoName').textContent=S.me.name+' · '+S.me.role;
-  $('stationbar').style.display=(isOp()||S.me.role==='supervisor')?'flex':'none';
+  $('stationbar').style.display=(isOp()||S.me.role==='supervisor'||S.me.role==='station')?'flex':'none';
   $('stnName').textContent=S.me.workCentre||'—';
+  $('crewBtn').classList.toggle('hidden',!(S.me.workCentre));
+  renderCrew();
   var t=$('tabs');t.innerHTML='';
   (TABS[S.me.role]||TABS.operator).forEach(function(x,i){
     var b=el('button','tab'+(i?'':' on'),x[1]);b.dataset.v=x[0];
@@ -103,10 +132,13 @@ function setTab(v){S.tab=v;
   Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){b.classList.toggle('on',b.dataset.v===v);});
   Array.prototype.forEach.call(document.querySelectorAll('.view'),function(s){s.classList.toggle('on',s.id==='v-'+v);});
   window.scrollTo(0,0);}
-function refresh(){return api('bootstrap').then(function(d){S.data=d;
+function refresh(){
+  if(S._busy) return Promise.resolve();      /* never stack two bootstraps */
+  S._busy=true;
+  return api('bootstrap').then(function(d){S._busy=false;S._lastRefresh=Date.now();S.data=d;
   renderStop();renderWork();renderTracker();renderDocs();renderBoard();renderReport();
   renderStock();renderScores();renderAdmin();})
-  .catch(function(e){toast(e.message,true);});}
+  .catch(function(e){S._busy=false;toast(e.message,true);});}
 
 /* ---------- WORK CENTRE downtime (not per project) ---------- */
 var tick;
@@ -141,6 +173,91 @@ $('resumeBtn').addEventListener('click',function(){
     toast((d.minutes||0)+' min downtime recorded');refresh();})
     .catch(function(){queueWrite('stopEnd',{workCentre:S.me.workCentre||''});toast('Saved on this phone');});
 });
+
+/* ---------- STATION MODE ----------
+   One tablet stays logged in at the machine. People identify with a 4-digit PIN.
+   This is what makes the system work for helpers who have no phone.            */
+function renderCrew(){
+  var c=$('stnCrew');c.innerHTML='';
+  if(S.crew.op){
+    var a=el('span','crewchip op',S.crew.op);c.appendChild(a);
+  }
+  S.crew.helpers.forEach(function(h){c.appendChild(el('span','crewchip help',h));});
+  if(!S.crew.op&&!S.crew.helpers.length&&S.me.workCentre)
+    c.appendChild(el('span','crewchip','कोणी नाही · nobody signed in'));
+}
+$('crewBtn').addEventListener('click',function(){crewDialog();});
+function crewDialog(){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Who is working here now'));
+  b.appendChild(el('div','top',S.me.workCentre||''));
+  b.appendChild(el('p','note','The operator signs in with a PIN. Helpers are ticked — they need no device and no password.'));
+
+  var people=(S.data.users||[]).filter(function(u){
+    return u.WorkCentre===S.me.workCentre||u.Kind==='helper';});
+  lab(b,'Operator running the machine');
+  var ops=el('div','people');
+  people.filter(function(u){return u.Kind!=='helper';}).forEach(function(u){
+    var d=el('div','person'+(S.crew.op===u.Name?' sel':''),u.Name);
+    d.appendChild(el('small',null,'Operator'));
+    d.addEventListener('click',function(){pinPad(u.Name);});
+    ops.appendChild(d);});
+  b.appendChild(ops);
+
+  lab(b,'Helpers assisting (tap to add or remove)');
+  var hs=el('div','people');
+  people.filter(function(u){return u.Kind==='helper';}).forEach(function(u){
+    var on=S.crew.helpers.indexOf(u.Name)>=0;
+    var d=el('div','person'+(on?' sel':''),u.Name);
+    d.appendChild(el('small',null,'Helper'));
+    d.addEventListener('click',function(){
+      var i=S.crew.helpers.indexOf(u.Name);
+      if(i>=0)S.crew.helpers.splice(i,1);else S.crew.helpers.push(u.Name);
+      store.set('crew',JSON.stringify(S.crew));
+      d.classList.toggle('sel');renderCrew();});
+    hs.appendChild(d);});
+  if(!hs.children.length) hs.appendChild(el('div','note','No helpers listed. Add them in Setup with Kind = helper.'));
+  b.appendChild(hs);
+
+  var go=el('button','bigbtn b-done dev');go.innerHTML='ठीक आहे <em>Done</em>';
+  go.addEventListener('click',closeSheet);b.appendChild(go);
+  $('sheet').classList.remove('hidden');
+}
+function pinPad(name){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','PIN for'));
+  b.appendChild(el('div','top',name));
+  var dots=el('div','pindots','');b.appendChild(dots);
+  var pin='';
+  var g=el('div','pingrid');
+  ['1','2','3','4','5','6','7','8','9','←','0','OK'].forEach(function(k){
+    var btn=el('button','pinkey',k);btn.type='button';
+    btn.addEventListener('click',function(){
+      if(k==='←'){pin=pin.slice(0,-1);}
+      else if(k==='OK'){submit();return;}
+      else if(pin.length<6){pin+=k;}
+      dots.textContent=pin.replace(/./g,'●');
+      if(pin.length===4)submit();
+    });
+    g.appendChild(btn);});
+  b.appendChild(g);
+  function submit(){
+    if(pin.length<4)return;
+    fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'PIN',token:S.stationToken||S.token,name:name,pin:pin})})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(j.status!=='success')throw new Error(j.message||'Wrong PIN');
+      if(!S.stationToken){S.stationToken=S.token;store.set('stok',S.stationToken);}
+      S.token=j.data.token;S.me=j.data.user;
+      S.crew.op=j.data.user.name;store.set('crew',JSON.stringify(S.crew));
+      store.set('t',S.token);store.set('me',JSON.stringify(S.me));
+      closeSheet();toast(j.data.user.name+' signed in');start();
+    })
+    .catch(function(e){pin='';dots.textContent='';toast(e.message,true);});
+  }
+  $('sheet').classList.remove('hidden');
+}
 
 /* ---------- MY WORK ---------- */
 function renderWork(){
@@ -223,7 +340,9 @@ function openTask(t,off){
   bNote.addEventListener('click',function(){noteDialog(t);});
   var bFile=el('button','chip');bFile.textContent='+ Photo / file';
   bFile.addEventListener('click',function(){uploadDialog(t.ProjectID,t.TaskID);});
-  actions.appendChild(bNote);actions.appendChild(bFile);
+  var bMat=el('button','chip');bMat.textContent='+ Material used';
+  bMat.addEventListener('click',function(){materialDialog(t);});
+  actions.appendChild(bNote);actions.appendChild(bFile);actions.appendChild(bMat);
   b.appendChild(actions);
 
   lab(b,'Item');
@@ -257,7 +376,8 @@ function openTask(t,off){
   done.addEventListener('click',function(){
     var body={taskID:t.TaskID,family:fs.value,qty:S.sel.qty,
       rework:rw.value?Number(rw.value):0,
-      workCentre:off?wc.value:(t.WorkCentre||S.me.workCentre||''),offStation:off?1:0};
+      workCentre:off?wc.value:(t.WorkCentre||S.me.workCentre||''),offStation:off?1:0,
+      helpers:S.crew.helpers.join(', '),via:S.stationToken?'station':'phone'};
     closeSheet();
     api('tap',body).then(function(r){
       toast(r.finished?('Task complete → '+(r.next||'')):(S.sel.qty+' पूर्ण · logged'));
@@ -309,9 +429,124 @@ function assignDialog(t){
       .catch(function(e){toast(e.message,true);});});
   b.appendChild(go);$('sheet').classList.remove('hidden');
 }
+/* ---------- EDITING: tracker is now live, not read-only ---------- */
+function taskEditor(t){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Edit task'));
+  b.appendChild(el('div','top',t.Operation));
+  b.appendChild(el('div','tproj',t.ProjectName+' · '+(t.WorkCentre||t.Grp)));
+
+  lab(b,'Assigned to');
+  var us=el('select');opt(us,'','— unassigned —');
+  (S.data.users||[]).forEach(function(u){opt(us,u.Name,u.Name+' ('+(u.WorkCentre||u.Role)+')',u.Name===t.AssignedTo);});
+  b.appendChild(us);
+  lab(b,'Work centre');
+  var wc=el('select');
+  (S.data.workCentres||[]).forEach(function(w){opt(wc,w.Name,w.Name,w.Name===t.WorkCentre);});
+  b.appendChild(wc);
+  lab(b,'Target quantity');var qt=inp(b,'number');qt.value=t.QtyTarget||0;
+  lab(b,'Completed quantity');var qd=inp(b,'number');qd.value=t.QtyDone||0;
+  lab(b,'Note for this task');var nt=inp(b,'text');nt.value=t.Note||'';
+
+  var save=el('button','bigbtn b-done');save.textContent='Save changes';
+  save.addEventListener('click',function(){
+    closeSheet();
+    api('saveTask',{row:{TaskID:t.TaskID,ProjectID:t.ProjectID,AssignedTo:us.value,
+      WorkCentre:wc.value,QtyTarget:Number(qt.value)||0,QtyDone:Number(qd.value)||0,Note:nt.value}})
+      .then(function(){toast('Task updated');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(save);
+
+  if(['director','planner'].indexOf(S.me.role)>=0){
+    b.appendChild(el('div','lbl','Force status — logged in the audit trail'));
+    var sb=el('div','statusbtns');
+    ['waiting','ready','running','done'].forEach(function(st){
+      var x=el('button','chip'+(String(t.Status)===st?' on':''),st);
+      x.addEventListener('click',function(){closeSheet();
+        api('setTaskStatus',{taskID:t.TaskID,status:st})
+          .then(function(){toast('Status set to '+st);refresh();})
+          .catch(function(e){toast(e.message,true);});});
+      sb.appendChild(x);});
+    b.appendChild(sb);
+    var del=el('button','chip');del.textContent='Delete this task';
+    del.style.marginTop='12px';del.style.color='var(--late)';
+    del.addEventListener('click',function(){closeSheet();
+      api('delTask',{taskID:t.TaskID,projectID:t.ProjectID})
+        .then(function(){toast('Task deleted');refresh();})
+        .catch(function(e){toast(e.message,true);});});
+    b.appendChild(del);
+  }
+  $('sheet').classList.remove('hidden');
+}
+function projectEditor(p){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Edit project'));
+  b.appendChild(el('div','top',p.Name));
+  lab(b,'Project name');var nm=inp(b,'text');nm.value=p.Name||'';
+  lab(b,'Customer');var cu=inp(b,'text');cu.value=p.Customer||'';
+  lab(b,'Site address');var ad=inp(b,'text');ad.value=p.Address||'';
+  lab(b,'Director');var dr=el('select');
+  ['Rupali','Ashutosh','Mohit'].forEach(function(x){opt(dr,x,x,x===p.Director);});b.appendChild(dr);
+  lab(b,'Size class');var sz=el('select');
+  ['S','M','L','XL'].forEach(function(x){opt(sz,x,x,x===p.Size);});b.appendChild(sz);
+  lab(b,'Quantity');var qt=inp(b,'number');qt.value=p.Qty||0;
+  lab(b,'Promised date');var pd=inp(b,'date');
+  if(p.PromisedDate){var dd=new Date(p.PromisedDate);
+    if(!isNaN(dd))pd.value=dd.toISOString().slice(0,10);}
+  lab(b,'Blocker (blank if running)');var bl=inp(b,'text');bl.value=p.Blocker||'';
+  var save=el('button','bigbtn b-done');save.textContent='Save project';
+  save.addEventListener('click',function(){closeSheet();
+    api('saveProject',{row:{ProjectID:p.ProjectID,Name:nm.value,Customer:cu.value,
+      Address:ad.value,Director:dr.value,Size:sz.value,Qty:Number(qt.value)||0,
+      PromisedDate:pd.value,Blocker:bl.value}})
+      .then(function(){toast('Project updated');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(save);$('sheet').classList.remove('hidden');
+}
+
 function closeSheet(){$('sheet').classList.add('hidden');}
 $('sheetClose').addEventListener('click',closeSheet);
 $('sheet').addEventListener('click',function(e){if(e.target===$('sheet'))closeSheet();});
+
+/* ---------- MATERIAL FROM INSIDE A TASK ----------
+   The operator who consumes the sheet is the one who records it. Stores stops
+   being a bottleneck and the stock figure stops drifting.                      */
+function materialDialog(t){
+  var b=$('sheetBody');b.innerHTML='';
+  b.appendChild(el('div','lbl','Material used on this job'));
+  b.appendChild(el('div','top',t.Operation));
+  b.appendChild(el('div','tproj',t.ProjectName));
+  lab(b,'What did you use');
+  var kind=el('select');opt(kind,'stock','Sheet / coil');opt(kind,'powder','Powder');
+  b.appendChild(kind);
+  lab(b,'Which one');
+  var item=el('select');b.appendChild(item);
+  function fill(){
+    item.innerHTML='';
+    if(kind.value==='powder')
+      (S.data.powder||[]).forEach(function(p){opt(item,p.PowderID,p.Shade+' · '+p.Make+' ('+p.StockKg+' kg)');});
+    else
+      (S.data.stock||[]).forEach(function(i){opt(item,i.ItemID,
+        i.Thickness+'mm '+i.Width+'x'+i.Length+' · '+i.Type+' ('+i.Qty+' '+i.Unit+')');});
+  }
+  kind.addEventListener('change',fill);fill();
+  lab(b,'How much');
+  var qn=inp(b,'number','quantity');qn.step='any';
+  var go=el('button','bigbtn b-done dev');go.innerHTML='वापरले <em>Used</em>';
+  go.addEventListener('click',function(){
+    var n=Number(qn.value)||0;
+    if(!n){toast('Enter a quantity',true);return;}
+    var body=(kind.value==='powder')
+      ?{powderID:item.value,kg:n,dir:'OUT',workCentre:t.WorkCentre||S.me.workCentre||'',
+        taskID:t.TaskID,projectID:t.ProjectID,note:'used at '+t.Operation}
+      :{itemID:item.value,qty:n,dir:'OUT',workCentre:t.WorkCentre||S.me.workCentre||'',
+        taskID:t.TaskID,projectID:t.ProjectID,note:'used at '+t.Operation};
+    closeSheet();
+    api(kind.value==='powder'?'powderMove':'stockMove',body)
+      .then(function(r){toast(r.low?'Recorded — STOCK NOW LOW':'Material recorded');refresh();})
+      .catch(function(e){toast(e.message,true);});});
+  b.appendChild(go);$('sheet').classList.remove('hidden');
+}
 
 /* ---------- NOTES ---------- */
 function noteDialog(t,projectOnly){
@@ -499,7 +734,7 @@ function renderTracker(){
       s.appendChild(el('div','st',t.Operation));
       s.appendChild(el('div','sw',(t.AssignedTo||'—')+
         (st==='running'?' · '+t.QtyDone+'/'+t.QtyTarget:'')));
-      if(canAssign()) s.addEventListener('click',function(){assignDialog(t);});
+      if(canAssign()) s.addEventListener('click',function(){taskEditor(t);});
       pipe.appendChild(s);});
     c.appendChild(pipe);
     var ch=el('div','chips');
@@ -510,6 +745,11 @@ function renderTracker(){
       var bf=el('button','chip');bf.textContent='+ File';
       bf.addEventListener('click',function(){uploadDialog(p.ProjectID,'');});
       ch.appendChild(bn);ch.appendChild(bf);
+      if(['director','planner'].indexOf(S.me.role)>=0){
+        var be=el('button','chip');be.textContent='Edit project';
+        be.addEventListener('click',function(){projectEditor(p);});
+        ch.appendChild(be);
+      }
     }
     c.appendChild(ch);
     (p.notes||[]).slice(0,3).forEach(function(n){
@@ -820,13 +1060,47 @@ $('addProject').addEventListener('click',function(){
   lab(b,'Unit');var un=el('select');['Door','Window','Piece','Baffles','Pod','Batch','Sqft']
     .forEach(function(x){opt(un,x);});b.appendChild(un);
   lab(b,'Promised date');var pd=inp(b,'date');
+
+  /* Activities: all steps ticked by default, untick what this job does not need */
+  lab(b,'Activities for this project');
+  var actWrap=el('div','opsel');b.appendChild(actWrap);
+  var allBtn=el('button','chip on','All');allBtn.type='button';
+  var noneBtn=el('button','chip','None');noneBtn.type='button';
+  var tog=el('div','chips');tog.appendChild(allBtn);tog.appendChild(noneBtn);
+  b.insertBefore(tog,actWrap);
+  function drawActs(){
+    actWrap.innerHTML='';
+    var steps=(S.data.routings||[]).filter(function(r){return r.Division===dv.value;})
+      .sort(function(a,b){return Number(a.Seq)-Number(b.Seq);});
+    if(!steps.length){actWrap.appendChild(el('div','note','No routing set for this division yet.'));return;}
+    steps.forEach(function(r){
+      var l=el('label');
+      var cb=el('input');cb.type='checkbox';cb.checked=true;cb.value=r.Operation;
+      l.appendChild(cb);l.appendChild(el('span',null,r.Seq+'. '+r.Operation));
+      var def=(S.data.defaults||[]).filter(function(d){return d.Operation===r.Operation;})[0];
+      l.appendChild(el('span','who',def&&def.AssignedTo?def.AssignedTo:'unassigned'));
+      actWrap.appendChild(l);});
+  }
+  dv.addEventListener('change',drawActs);drawActs();
+  allBtn.addEventListener('click',function(){
+    Array.prototype.forEach.call(actWrap.querySelectorAll('input'),function(c){c.checked=true;});
+    allBtn.classList.add('on');noneBtn.classList.remove('on');});
+  noneBtn.addEventListener('click',function(){
+    Array.prototype.forEach.call(actWrap.querySelectorAll('input'),function(c){c.checked=false;});
+    noneBtn.classList.add('on');allBtn.classList.remove('on');});
+
   var go=el('button','bigbtn b-done');go.textContent='Create project + tasks';
   go.addEventListener('click',function(){
     if(!nm.value){toast('Name is required',true);return;}
+    var ops=[];
+    Array.prototype.forEach.call(actWrap.querySelectorAll('input'),function(c){
+      if(c.checked)ops.push(c.value);});
+    if(!ops.length){toast('Pick at least one activity',true);return;}
     closeSheet();
-    api('newProject',{row:{Name:nm.value,Division:dv.value,Director:dr.value,Customer:cu.value,
+    api('newProject',{operations:ops,
+      row:{Name:nm.value,Division:dv.value,Director:dr.value,Customer:cu.value,
       Address:ad.value,Size:sz.value,Qty:Number(qt.value)||0,Unit:un.value,PromisedDate:pd.value}})
-      .then(function(r){toast(r.tasks+' tasks created');refresh();})
+      .then(function(r){toast(r.tasks+' tasks created and assigned');refresh();})
       .catch(function(e){toast(e.message,true);});});
   b.appendChild(go);$('sheet').classList.remove('hidden');
 });
@@ -891,20 +1165,33 @@ $('addUser').addEventListener('click',function(){
     {key:'Username',label:'Username (lower case, no spaces)'},
     {key:'Password',label:'Password'},
     {key:'Name',label:'Full name'},
-    {key:'Role',label:'Role',options:function(){return ['operator','supervisor','stores','planner','office','accounts','director'];}},
+    {key:'Role',label:'Role',options:function(){return ['operator','supervisor','stores','planner','office','accounts','director','station'];}},
+    {key:'Kind',label:'Operator or helper',options:function(){return ['operator','helper'];}},
+    {key:'Pin',label:'4-digit PIN for the shared tablet',ph:'e.g. 1234'},
     {key:'WorkCentre',label:'Work centre group',options:function(){return ['','Laser','Brake','CTL',
       'Welding','Grinding','Powder','Hardware','Packing','Design','Site'];}},
     {key:'Lang',label:'Language',options:function(){return ['mr','en'];}}
   ],'saveUser',function(r){return {Username:r.Username.value.toLowerCase(),Password:r.Password.value,
-    Name:r.Name.value,Role:r.Role.value,WorkCentre:r.WorkCentre.value,Lang:r.Lang.value,Active:'yes'};});
+    Name:r.Name.value,Role:r.Role.value,WorkCentre:r.WorkCentre.value,Lang:r.Lang.value,
+    Kind:r.Kind.value,Pin:r.Pin.value,Active:'yes'};});
 });
 
 /* ---------- go ---------- */
 try{S.queue=JSON.parse(store.get('q')||'[]');}catch(e){S.queue=[];}
+try{S.crew=JSON.parse(store.get('crew')||'{"op":null,"helpers":[]}');}catch(e){S.crew={op:null,helpers:[]};}
+S.stationToken=store.get('stok');
 renderSync();
 S.token=store.get('t');
 try{S.me=JSON.parse(store.get('me')||'null');}catch(e){S.me=null;}
 if(S.token&&S.me)start();else showLogin();
 window.addEventListener('online',function(){flushQueue().then(refresh);});
-setInterval(function(){if(S.token&&!document.hidden)refresh();},120000);
+/* Random offset per device, and no polling while the screen is hidden.
+   Without this every phone wakes on the same second and Apps Script queues them. */
+var POLL=120000+Math.floor(Math.random()*45000);
+setInterval(function(){ if(S.token&&!document.hidden) refresh(); },POLL);
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden&&S.token){
+    if(!S._lastRefresh||Date.now()-S._lastRefresh>30000) refresh();
+  }
+});
 })();

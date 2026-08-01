@@ -279,3 +279,32 @@ table.d tr.done td{opacity:.42}
 
 textarea{background:#0e1216;border:1px solid var(--rule);color:var(--ink);padding:11px 12px;
   border-radius:3px;font-family:'Barlow',sans-serif;font-size:16px;resize:vertical;line-height:1.45}
+
+/* ---------- station mode ---------- */
+.stnbtns{display:flex;gap:9px;flex-wrap:wrap}
+.stncrew{display:flex;gap:7px;flex-wrap:wrap;flex:1;min-width:120px}
+.crewchip{background:var(--panel2);border:1px solid var(--rule);border-radius:2px;
+  padding:4px 9px;font-size:12.5px;display:flex;gap:6px;align-items:center}
+.crewchip.op{border-color:var(--ok);color:var(--ok)}
+.crewchip.help{border-color:var(--warn);color:var(--warn)}
+.pingrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+.pinkey{background:var(--panel2);border:1px solid var(--rule);color:var(--ink);border-radius:3px;
+  padding:19px 6px;font-family:'IBM Plex Mono';font-size:23px;font-weight:600;cursor:pointer}
+.pinkey:hover{background:#2c353f}
+.pindots{font-family:'IBM Plex Mono';font-size:30px;letter-spacing:.34em;text-align:center;
+  color:var(--orange);min-height:38px}
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:9px;margin-top:12px}
+.person{background:var(--panel2);border:1px solid var(--rule);border-radius:3px;padding:14px 10px;
+  cursor:pointer;text-align:center;font-family:'Noto Sans Devanagari',sans-serif;font-size:16px}
+.person:hover{background:#2c353f}
+.person.sel{border-color:var(--ok);background:rgba(74,222,128,.13);color:var(--ok)}
+.person small{display:block;font-family:'Barlow Condensed';font-size:10.5px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--dim);margin-top:3px}
+.opsel{display:grid;gap:7px;margin:10px 0}
+.opsel label{display:flex;gap:10px;align-items:center;background:var(--panel2);
+  border:1px solid var(--rule);border-radius:2px;padding:10px 12px;cursor:pointer;
+  margin:0;text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink);font-weight:400;
+  font-family:'Barlow',sans-serif}
+.opsel input{width:auto;margin:0}
+.opsel .who{margin-left:auto;font-size:11.5px;color:var(--dim);font-family:'IBM Plex Mono'}
+.statusbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
